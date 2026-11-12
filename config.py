@@ -20,6 +20,7 @@ MIN_BARS = 250                         # skip recent IPOs
 # ---- Values precomputed for the dashboard's adjustable filters
 MA_PERIODS = [5, 10, 20, 50, 100, 150, 200]
 VOLUME_PERIODS = [5, 10, 20, 50]
+RETURN_PERIODS = [20, 60, 90]          # trading days, shown as % change columns
 
 # ---- Pullback: PATTERN rules
 PB_MIN_DAYS = 2              # bars since the swing high

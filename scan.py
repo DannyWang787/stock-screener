@@ -112,6 +112,8 @@ def main(limit=None):
         hi52, lo52 = a["h"][-252:].max(), a["l"][-252:].min()
         row = {
             "t": t, **uni[t], "close": round(c[-1], 2), "chg": round((c[-1] / c[-2] - 1) * 100, 2),
+            # price change over the last 20 / 60 / 90 trading days
+            "ret": {str(n): round((c[-1] / c[-1 - n] - 1) * 100, 1) for n in C.RETURN_PERIODS},
             "rs": rs[t], "atr": round(a["atr"][-1] / c[-1] * 100, 1),
             "fromHigh": round((c[-1] / hi52 - 1) * 100, 1), "fromLow": round((c[-1] / lo52 - 1) * 100, 1),
             "vol": {str(n): int(a[f"vol{n}"][-1]) for n in C.VOLUME_PERIODS},

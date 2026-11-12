@@ -73,7 +73,7 @@ select.ctl { padding-right: 4px; }
 .rules-more label { display: inline-flex; gap: 8px; align-items: center; }
 
 /* main split */
-.main { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 16px; align-items: start; }
+.main { display: grid; grid-template-columns: minmax(0, 1.7fr) minmax(0, 1fr); gap: 16px; align-items: start; }
 @media (max-width: 1080px) { .main { grid-template-columns: minmax(0, 1fr); } }
 .list-head { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; justify-content: space-between; padding: 12px 14px; border-bottom: 1px solid var(--line); }
 .seg { display: inline-flex; background: var(--panel-2); border-radius: 8px; padding: 3px; gap: 2px; }
@@ -334,6 +334,7 @@ footer { color: var(--muted); font-size: 12.5px; max-width: 90ch; }
   const COLS = [
     ["t", "Ticker", (x) => x.r.t], ["type", "Setup", (x) => x.s.type], ["status", "Status", (x) => STATUS[x.s.status][0]],
     ["score", "Score", (x) => x.s.score], ["close", "Close", (x) => x.r.close], ["chg", "Chg", (x) => x.r.chg],
+    ["r20", "20D %", (x) => x.r.ret["20"]], ["r60", "60D %", (x) => x.r.ret["60"]], ["r90", "90D %", (x) => x.r.ret["90"]],
     ["rs", "RS", (x) => x.r.rs], ["vol", "$ vol", (x) => x.r.dvol[S.dvPeriod]],
   ];
   function renderList() {
@@ -356,6 +357,7 @@ footer { color: var(--muted); font-size: 12.5px; max-width: 90ch; }
         <td class="l"><span class="pill ${st[1]}">${st[0]}</span></td>
         <td><span class="score num">${s.score}<i><b style="width:${s.score}%"></b></i></span></td>
         <td class="num">${fmt(r.close)}</td><td class="num ${r.chg >= 0 ? "up" : "down"}">${pct(r.chg)}</td>
+        ${["20", "60", "90"].map((n) => `<td class="num ${r.ret[n] >= 0 ? "up" : "down"}">${pct(r.ret[n])}</td>`).join("")}
         <td class="num">${r.rs}</td><td class="num">${money(r.dvol[S.dvPeriod])}</td></tr>`;
     }).join("");
     $("empty").hidden = list.length > 0;
