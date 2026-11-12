@@ -4,7 +4,7 @@
 <style>
 /* Layout: a trading desk sheet. Regime strip on top, the filter rules as a
    row-per-condition panel (like a broker screener), then ranked list left and
-   the selected ticket (chart + levels + sizing) right. */
+   the selected stock (chart + setup details + score breakdown) right. */
 :root {
   --bg: #f3f5f8; --panel: #ffffff; --panel-2: #eaeef3; --line: #d6dce5;
   --fg: #141a24; --muted: #5a6577; --accent: #1f5fd1; --accent-soft: #e2ebfb;
@@ -174,7 +174,6 @@ footer { color: var(--muted); font-size: 12.5px; max-width: 90ch; }
     <div class="rules-more">
       <label>Relative strength rank ≥ <input class="ctl" id="rsMin" type="number" min="0" max="99" step="5" inputmode="numeric"></label>
       <label>Minimum score <input class="ctl" id="scoreMin" type="number" min="0" max="100" step="5" inputmode="numeric"></label>
-      <label>Max risk to stop <input class="ctl" id="riskMax" type="number" min="0" step="0.5" inputmode="decimal" placeholder="any"> %</label>
       <label><input type="checkbox" id="hideEarn"> Hide stocks reporting earnings within 7 days</label>
     </div>
   </section>
@@ -195,7 +194,7 @@ footer { color: var(--muted); font-size: 12.5px; max-width: 90ch; }
     </section>
 
     <section class="panel ticket" id="ticket" aria-label="Selected candidate">
-      <div class="empty" id="ticketEmpty">Select a candidate to see its chart and trade levels.</div>
+      <div class="empty" id="ticketEmpty">Select a candidate to see its chart and setup details.</div>
       <div id="ticketBody" hidden>
         <div class="ticket-head">
           <div><span class="tk" id="dTk"></span> <span class="muted" id="dNm"></span></div>
@@ -207,12 +206,6 @@ footer { color: var(--muted); font-size: 12.5px; max-width: 90ch; }
           <span id="lgRes" style="--c: var(--down)" hidden>Resistance zone</span><span id="lgSup" style="--c: var(--up)" hidden>Support zone</span>
         </div>
         <div id="chart"></div>
-        <dl class="levels">
-          <div><dt>Entry</dt><dd id="dEntry"></dd></div>
-          <div><dt>Stop</dt><dd id="dStop" class="down"></dd></div>
-          <div><dt>Target (2R)</dt><dd id="dTarget" class="up"></dd></div>
-          <div><dt>Risk</dt><dd id="dRisk"></dd></div>
-        </dl>
         <div class="note" id="dNote" hidden style="margin-top:12px"></div>
         <div class="ticket-body">
           <div>
@@ -220,14 +213,6 @@ footer { color: var(--muted); font-size: 12.5px; max-width: 90ch; }
             <dl class="kv" id="dNotes"></dl>
             <h2 style="margin-top:16px">Score breakdown</h2>
             <dl class="kv" id="dParts"></dl>
-          </div>
-          <div class="size">
-            <h2>Position size</h2>
-            <div class="size-in">
-              <label>Account ($)<input class="ctl" id="acct" type="number" min="0" step="1000" inputmode="numeric"></label>
-              <label>Risk per trade (%)<input class="ctl" id="riskPct" type="number" min="0" step="0.25" inputmode="decimal"></label>
-            </div>
-            <div class="size-out" id="sizeOut"></div>
           </div>
         </div>
       </div>
@@ -243,10 +228,10 @@ footer { color: var(--muted); font-size: 12.5px; max-width: 90ch; }
   "use strict";
   const $ = (id) => document.getElementById(id);
   const DEFAULTS = {
-    dvPeriod: "20", dvMin: 50, volPeriod: "10", volMin: "", priceMin: 3, priceMax: "", rsMin: 0, scoreMin: 0, riskMax: "", hideEarn: false,
+    dvPeriod: "20", dvMin: 50, volPeriod: "10", volMin: "", priceMin: 3, priceMax: "", rsMin: 0, scoreMin: 0, hideEarn: false,
     rules: [{ a: "ema", ap: "20", op: ">", b: "ema", bp: "50" }, { a: "ema", ap: "10", op: ">", b: "ema", bp: "50" }],
     setup: "all", status: { setup: true, go: true, ext: false },
-    sort: { key: "score", dir: -1 }, acct: 50000, riskPct: 1,
+    sort: { key: "score", dir: -1 },
   };
   const store = {
     get() { try { return JSON.parse(localStorage.getItem("swing-screener-v2") || "null"); } catch (e) { return null; } },
@@ -289,7 +274,7 @@ footer { color: var(--muted); font-size: 12.5px; max-width: 90ch; }
   function syncInputs() {
     $("dvPeriod").innerHTML = META.volPeriods.map((p) => `<option${String(p) === S.dvPeriod ? " selected" : ""}>${p}</option>`).join("");
     $("volPeriod").innerHTML = META.volPeriods.map((p) => `<option${String(p) === S.volPeriod ? " selected" : ""}>${p}</option>`).join("");
-    for (const k of ["dvMin", "volMin", "priceMin", "priceMax", "rsMin", "scoreMin", "riskMax", "acct", "riskPct"]) $(k).value = S[k];
+    for (const k of ["dvMin", "volMin", "priceMin", "priceMax", "rsMin", "scoreMin"]) $(k).value = S[k];
     showWan();
     $("hideEarn").checked = S.hideEarn;
     renderRules();
@@ -297,8 +282,8 @@ footer { color: var(--muted); font-size: 12.5px; max-width: 90ch; }
   function bindFilters() {
     $("dvPeriod").addEventListener("change", (e) => { S.dvPeriod = e.target.value; changed(); });
     $("volPeriod").addEventListener("change", (e) => { S.volPeriod = e.target.value; changed(); });
-    for (const k of ["dvMin", "volMin", "priceMin", "priceMax", "rsMin", "scoreMin", "riskMax", "acct", "riskPct"])
-      $(k).addEventListener("input", (e) => { S[k] = e.target.value === "" ? "" : Number(e.target.value); changed(k === "acct" || k === "riskPct"); });
+    for (const k of ["dvMin", "volMin", "priceMin", "priceMax", "rsMin", "scoreMin"])
+      $(k).addEventListener("input", (e) => { S[k] = e.target.value === "" ? "" : Number(e.target.value); changed(); });
     $("hideEarn").addEventListener("change", (e) => { S.hideEarn = e.target.checked; changed(); });
     $("maRules").addEventListener("change", (e) => {
       const d = e.target.dataset; if (d.i == null) return;
@@ -309,13 +294,12 @@ footer { color: var(--muted); font-size: 12.5px; max-width: 90ch; }
       S.rules.splice(Number(b.dataset.del), 1); renderRules(); changed();
     });
     $("addRule").addEventListener("click", () => { S.rules.push({ a: "price", ap: "20", op: ">", b: "ema", bp: "50" }); renderRules(); changed(); });
-    $("reset").addEventListener("click", () => { const keep = { acct: S.acct, riskPct: S.riskPct }; S = Object.assign(clone(DEFAULTS), keep); syncInputs(); changed(); });
+    $("reset").addEventListener("click", () => { S = clone(DEFAULTS); syncInputs(); changed(); });
   }
   function showWan() { $("volWan").textContent = S.volMin !== "" && S.volMin != null ? `(${fmt(S.volMin * 100, 0)} 萬股)` : ""; }
   function changed(sizeOnly) {
     store.set(S);
     showWan();
-    if (sizeOnly) return renderSize();
     renderList();
   }
 
@@ -339,7 +323,6 @@ footer { color: var(--muted); font-size: 12.5px; max-width: 90ch; }
     for (const r of ROWS) {
       if (!passes(r)) continue;
       for (const s of r.setups) {
-        if (S.riskMax !== "" && S.riskMax > 0 && s.risk > S.riskMax) continue;
         if (S.scoreMin !== "" && s.score < S.scoreMin) continue;
         out.push({ r, s, id: r.t + ":" + s.type });
       }
@@ -351,8 +334,7 @@ footer { color: var(--muted); font-size: 12.5px; max-width: 90ch; }
   const COLS = [
     ["t", "Ticker", (x) => x.r.t], ["type", "Setup", (x) => x.s.type], ["status", "Status", (x) => STATUS[x.s.status][0]],
     ["score", "Score", (x) => x.s.score], ["close", "Close", (x) => x.r.close], ["chg", "Chg", (x) => x.r.chg],
-    ["entry", "Entry", (x) => x.s.entry], ["stop", "Stop", (x) => x.s.stop], ["risk", "Risk", (x) => x.s.risk],
-    ["rs", "RS", (x) => x.r.rs], ["vol", "$ vol", (x) => x.r.dvol[S.dvPeriod]], ["earn", "Earnings", (x) => x.r.earn || "9999"],
+    ["rs", "RS", (x) => x.r.rs], ["vol", "$ vol", (x) => x.r.dvol[S.dvPeriod]],
   ];
   function renderList() {
     const all = candidates();
@@ -368,16 +350,13 @@ footer { color: var(--muted); font-size: 12.5px; max-width: 90ch; }
     $("thead").innerHTML = COLS.map((c) => `<th data-key="${c[0]}" class="${c[0] === "type" || c[0] === "status" ? "l" : ""}"${c[0] === S.sort.key ? ` aria-sort="${S.sort.dir > 0 ? "ascending" : "descending"}"` : ""}>${c[1]}${c[0] === S.sort.key ? (S.sort.dir > 0 ? " ↑" : " ↓") : ""}</th>`).join("");
     $("tbody").innerHTML = list.map((x) => {
       const { r, s } = x, st = STATUS[s.status];
-      let earn = "<span class='muted'>–</span>";
-      if (r.earn) { const d = daysTo(r.earn); earn = d >= 0 && d <= 14 ? `<span class="pill earn">in ${d}d</span>` : `<span class="muted num">${r.earn.slice(5)}</span>`; }
       return `<tr data-id="${x.id}" aria-selected="${x.id === selected}" tabindex="0">
         <td><div class="tk">${r.t}</div><div class="nm">${esc(r.name)}</div></td>
         <td class="l">${SETUP_NAME[s.type]}</td>
         <td class="l"><span class="pill ${st[1]}">${st[0]}</span></td>
         <td><span class="score num">${s.score}<i><b style="width:${s.score}%"></b></i></span></td>
         <td class="num">${fmt(r.close)}</td><td class="num ${r.chg >= 0 ? "up" : "down"}">${pct(r.chg)}</td>
-        <td class="num">${fmt(s.entry)}</td><td class="num">${fmt(s.stop)}</td><td class="num">${fmt(s.risk, 1)}%</td>
-        <td class="num">${r.rs}</td><td class="num">${money(r.dvol[S.dvPeriod])}</td><td>${earn}</td></tr>`;
+        <td class="num">${r.rs}</td><td class="num">${money(r.dvol[S.dvPeriod])}</td></tr>`;
     }).join("");
     $("empty").hidden = list.length > 0;
     if (!list.length) $("empty").textContent = all.length
@@ -413,8 +392,6 @@ footer { color: var(--muted); font-size: 12.5px; max-width: 90ch; }
     $("dPx").textContent = fmt(r.close);
     $("dChg").textContent = pct(r.chg, 2); $("dChg").className = "num " + (r.chg >= 0 ? "up" : "down");
     $("dPills").innerHTML = `<span class="pill">${SETUP_NAME[s.type]}</span> <span class="pill ${st[1]}">${st[0]}</span>`;
-    $("dEntry").textContent = fmt(s.entry); $("dStop").textContent = fmt(s.stop); $("dTarget").textContent = fmt(s.target);
-    $("dRisk").textContent = fmt(s.risk, 1) + "%";
     $("dSetupName").textContent = SETUP_NAME[s.type] + " details";
     const extra = { "Score": s.score + " / 100", "RS rank": r.rs, "ATR": fmt(r.atr, 1) + "% of price", "From 52-week high": pct(r.fromHigh), "Volume today": fmt(r.volToday, 2) + "x avg" };
     $("dNotes").innerHTML = Object.entries(Object.assign({}, s.notes, extra)).map(([k, v]) => `<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join("");
@@ -422,22 +399,12 @@ footer { color: var(--muted); font-size: 12.5px; max-width: 90ch; }
       `<dt><strong>Total</strong></dt><dd><strong>${s.score} / 100</strong></dd>`;
     const notes = [];
     if (r.earn) { const d = daysTo(r.earn); if (d >= 0 && d <= 14) notes.push(`Earnings expected ${r.earn} (in ${d} days). A swing trade may be held through the report.`); }
-    if (s.status === "extended") notes.push(`Price is ${fmt(s.ext, 1)}% above the entry. Buying here means chasing.`);
+    if (s.status === "extended") notes.push(`Price is ${fmt(s.ext, 1)}% above the base high.`);
     $("dNote").hidden = !notes.length; $("dNote").textContent = notes.join(" ");
     $("lgRes").hidden = $("lgSup").hidden = s.type !== "flatbase";
-    current = x; renderSize(); drawChart(x);
+    current = x; drawChart(x);
   }
   let current = null;
-  function renderSize() {
-    if (!current) return;
-    const s = current.s, perShare = s.entry - s.stop, risk$ = (Number(S.acct) || 0) * (Number(S.riskPct) || 0) / 100;
-    if (!(risk$ > 0) || !(perShare > 0)) { $("sizeOut").textContent = "Enter an account size and risk percent."; return; }
-    let shares = Math.floor(risk$ / perShare), capped = false;
-    if (shares * s.entry > S.acct) { shares = Math.floor(S.acct / s.entry); capped = true; }
-    const value = shares * s.entry;
-    $("sizeOut").innerHTML = `<strong>${shares.toLocaleString("en-US")}</strong> shares · $${fmt(value, 0)} (${fmt(value / S.acct * 100, 0)}% of account)<br>
-      <span class="muted">Loss at stop $${fmt(shares * perShare, 0)} · gain at target $${fmt(shares * (s.target - s.entry), 0)}${capped ? " · capped at account size" : ""}</span>`;
-  }
 
   /* ---------------- chart ---------------- */
   const css = (v) => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
@@ -487,8 +454,6 @@ footer { color: var(--muted); font-size: 12.5px; max-width: 90ch; }
       ls.setData(arr.map((v, i) => (v == null ? null : { time: dates[i], value: +v.toFixed(2) })).filter(Boolean)); return ls;
     };
     line(emaArr(b.c, 200, b.e200), P.ma200, 1); line(emaArr(b.c, 50), P.ma50, 2); line(emaArr(b.c, 20), P.ma20, 1); line(emaArr(b.c, 10), P.ma10, 1);
-    const pl = (price, color, title, style) => candle.createPriceLine({ price, color, lineWidth: 1, lineStyle: style == null ? LC.LineStyle.Dashed : style, axisLabelVisible: true, title });
-    pl(s.entry, P.accent, "Entry"); pl(s.stop, P.down, "Stop"); pl(s.target, P.up, "Target");
     const n = dates.length - 1, i0 = Math.max(0, n - s.span[0]), i1 = Math.max(0, n - s.span[1]);
     if (s.type === "flatbase") {
       // Shaded bands: resistance across the top of the base, support across the bottom.

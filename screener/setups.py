@@ -232,7 +232,7 @@ def detect_flat_base(a, rs):
         ("Touches of resistance", q["touch"], 20),
         ("Closes above the 50 EMA", q["above"], 10),
         ("Sideways, not drifting", q["side"], 10),
-        ("Price near the entry", _clip01(1 - abs(c[t] / entry - 1) / 0.08), 10),
+        ("Price near the base high", _clip01(1 - abs(c[t] / entry - 1) / 0.08), 10),
         ("Advance before the base", q["adv"], 5),
     ])
     notes = {"Pivot (base high)": round(b["pivot"], 2), "Base low": round(b["low"], 2),
