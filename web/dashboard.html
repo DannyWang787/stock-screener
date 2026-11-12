@@ -156,6 +156,14 @@ footer { color: var(--muted); font-size: 12.5px; max-width: 90ch; }
       <span class="hint">M traded per day (price × shares)</span>
     </div>
     <div class="rule">
+      <span class="name">Share volume</span>
+      <span class="hint">average of last</span>
+      <select class="ctl" id="volPeriod" aria-label="Share volume averaging period"></select>
+      <span class="hint">days ≥</span>
+      <input class="ctl" id="volMin" type="number" min="0" step="0.5" inputmode="decimal" placeholder="any" aria-label="Minimum average volume in million shares">
+      <span class="hint">M shares <span id="volWan"></span></span>
+    </div>
+    <div class="rule">
       <span class="name">Price</span>
       <input class="ctl" id="priceMin" type="number" min="0" step="1" inputmode="decimal" aria-label="Minimum price">
       <span class="hint">to</span>
@@ -235,7 +243,7 @@ footer { color: var(--muted); font-size: 12.5px; max-width: 90ch; }
   "use strict";
   const $ = (id) => document.getElementById(id);
   const DEFAULTS = {
-    dvPeriod: "20", dvMin: 50, priceMin: 3, priceMax: "", rsMin: 0, scoreMin: 0, riskMax: "", hideEarn: false,
+    dvPeriod: "20", dvMin: 50, volPeriod: "10", volMin: "", priceMin: 3, priceMax: "", rsMin: 0, scoreMin: 0, riskMax: "", hideEarn: false,
     rules: [{ a: "ema", ap: "20", op: ">", b: "ema", bp: "50" }, { a: "ema", ap: "10", op: ">", b: "ema", bp: "50" }],
     setup: "all", status: { setup: true, go: true, ext: false },
     sort: { key: "score", dir: -1 }, acct: 50000, riskPct: 1,
@@ -280,13 +288,16 @@ footer { color: var(--muted); font-size: 12.5px; max-width: 90ch; }
   }
   function syncInputs() {
     $("dvPeriod").innerHTML = META.volPeriods.map((p) => `<option${String(p) === S.dvPeriod ? " selected" : ""}>${p}</option>`).join("");
-    for (const k of ["dvMin", "priceMin", "priceMax", "rsMin", "scoreMin", "riskMax", "acct", "riskPct"]) $(k).value = S[k];
+    $("volPeriod").innerHTML = META.volPeriods.map((p) => `<option${String(p) === S.volPeriod ? " selected" : ""}>${p}</option>`).join("");
+    for (const k of ["dvMin", "volMin", "priceMin", "priceMax", "rsMin", "scoreMin", "riskMax", "acct", "riskPct"]) $(k).value = S[k];
+    showWan();
     $("hideEarn").checked = S.hideEarn;
     renderRules();
   }
   function bindFilters() {
     $("dvPeriod").addEventListener("change", (e) => { S.dvPeriod = e.target.value; changed(); });
-    for (const k of ["dvMin", "priceMin", "priceMax", "rsMin", "scoreMin", "riskMax", "acct", "riskPct"])
+    $("volPeriod").addEventListener("change", (e) => { S.volPeriod = e.target.value; changed(); });
+    for (const k of ["dvMin", "volMin", "priceMin", "priceMax", "rsMin", "scoreMin", "riskMax", "acct", "riskPct"])
       $(k).addEventListener("input", (e) => { S[k] = e.target.value === "" ? "" : Number(e.target.value); changed(k === "acct" || k === "riskPct"); });
     $("hideEarn").addEventListener("change", (e) => { S.hideEarn = e.target.checked; changed(); });
     $("maRules").addEventListener("change", (e) => {
@@ -300,8 +311,10 @@ footer { color: var(--muted); font-size: 12.5px; max-width: 90ch; }
     $("addRule").addEventListener("click", () => { S.rules.push({ a: "price", ap: "20", op: ">", b: "ema", bp: "50" }); renderRules(); changed(); });
     $("reset").addEventListener("click", () => { const keep = { acct: S.acct, riskPct: S.riskPct }; S = Object.assign(clone(DEFAULTS), keep); syncInputs(); changed(); });
   }
+  function showWan() { $("volWan").textContent = S.volMin !== "" && S.volMin != null ? `(${fmt(S.volMin * 100, 0)} 萬股)` : ""; }
   function changed(sizeOnly) {
     store.set(S);
+    showWan();
     if (sizeOnly) return renderSize();
     renderList();
   }
@@ -310,6 +323,7 @@ footer { color: var(--muted); font-size: 12.5px; max-width: 90ch; }
   const side = (r, kind, p) => (kind === "price" ? r.close : r[kind][p]);
   function passes(r) {
     if (S.dvMin !== "" && r.dvol[S.dvPeriod] < S.dvMin * 1e6) return false;
+    if (S.volMin !== "" && S.volMin != null && r.vol[S.volPeriod] < S.volMin * 1e6) return false;
     if (S.priceMin !== "" && r.close < S.priceMin) return false;
     if (S.priceMax !== "" && S.priceMax > 0 && r.close > S.priceMax) return false;
     if (S.rsMin !== "" && r.rs < S.rsMin) return false;
@@ -509,6 +523,7 @@ footer { color: var(--muted); font-size: 12.5px; max-width: 90ch; }
   fetch("data/scan.json").then((r) => { if (!r.ok) throw new Error(r.status); return r.json(); }).then((d) => {
     META = d.meta; ROWS = d.rows;
     if (!META.volPeriods.map(String).includes(S.dvPeriod)) S.dvPeriod = "20";
+    if (!META.volPeriods.map(String).includes(String(S.volPeriod))) S.volPeriod = "10";
     renderMeta(); syncInputs(); bindFilters(); bindList(); renderList();
 
   }).catch((e) => {
