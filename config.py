@@ -3,7 +3,7 @@
 # ---- Universe scanned each night (wider than the dashboard defaults, so the
 # ---- filters in the dashboard can be loosened without a rescan)
 UNIVERSE_MIN_PRICE = 3.0
-UNIVERSE_MIN_AVG_VOLUME = 500_000      # shares, 10-day average
+UNIVERSE_MIN_DOLLAR_VOLUME = 10_000_000  # price x shares, 20-day average
 HISTORY_PERIOD = "2y"
 MIN_BARS = 250                         # skip recent IPOs
 

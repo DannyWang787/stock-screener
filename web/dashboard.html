@@ -148,11 +148,19 @@ footer { color: var(--muted); font-size: 12.5px; max-width: 90ch; }
       <button class="btn ghost" id="reset" type="button">Reset to my defaults</button>
     </div>
     <div class="rule">
-      <span class="name">Volume</span>
+      <span class="name">Dollar volume</span>
+      <span class="hint">average of last</span>
+      <select class="ctl" id="dvPeriod" aria-label="Dollar volume averaging period"></select>
+      <span class="hint">days ≥ $</span>
+      <input class="ctl" id="dvMin" type="number" min="0" step="10" inputmode="decimal" placeholder="any" aria-label="Minimum average dollar volume in millions">
+      <span class="hint">M traded per day (price × shares)</span>
+    </div>
+    <div class="rule">
+      <span class="name">Share volume</span>
       <span class="hint">average of last</span>
       <select class="ctl" id="volPeriod" aria-label="Volume averaging period"></select>
       <span class="hint">days ≥</span>
-      <input class="ctl" id="volMin" type="number" min="0" step="0.5" inputmode="decimal" aria-label="Minimum average volume in million shares">
+      <input class="ctl" id="volMin" type="number" min="0" step="0.5" inputmode="decimal" placeholder="any" aria-label="Minimum average volume in million shares">
       <span class="hint">M shares <span id="volWan"></span></span>
     </div>
     <div class="rule">
@@ -232,14 +240,14 @@ footer { color: var(--muted); font-size: 12.5px; max-width: 90ch; }
   "use strict";
   const $ = (id) => document.getElementById(id);
   const DEFAULTS = {
-    volPeriod: "10", volMin: 5, priceMin: 3, priceMax: "", rsMin: 0, riskMax: "", hideEarn: false,
+    dvPeriod: "20", dvMin: 50, volPeriod: "10", volMin: "", priceMin: 3, priceMax: "", rsMin: 0, riskMax: "", hideEarn: false,
     rules: [{ a: "ema", ap: "20", op: ">", b: "ema", bp: "50" }, { a: "ema", ap: "10", op: ">", b: "ema", bp: "50" }],
     setup: "all", status: { setup: true, go: true, ext: false },
     sort: { key: "score", dir: -1 }, acct: 50000, riskPct: 1,
   };
   const store = {
-    get() { try { return JSON.parse(localStorage.getItem("swing-screener") || "null"); } catch (e) { return null; } },
-    set(v) { try { localStorage.setItem("swing-screener", JSON.stringify(v)); } catch (e) { /* storage unavailable */ } },
+    get() { try { return JSON.parse(localStorage.getItem("swing-screener-v2") || "null"); } catch (e) { return null; } },
+    set(v) { try { localStorage.setItem("swing-screener-v2", JSON.stringify(v)); } catch (e) { /* storage unavailable */ } },
   };
   const clone = (o) => JSON.parse(JSON.stringify(o));
   let S = Object.assign(clone(DEFAULTS), store.get() || {});
@@ -251,6 +259,7 @@ footer { color: var(--muted); font-size: 12.5px; max-width: 90ch; }
     breakout: ["Breaking out", "s-go", "go"], buyrange: ["In buy range", "s-go", "go"], extended: ["Extended", "s-ext", "ext"],
   };
   const fmt = (n, d = 2) => (n == null || isNaN(n) ? "–" : Number(n).toLocaleString("en-US", { minimumFractionDigits: d, maximumFractionDigits: d }));
+  const money = (n) => (n >= 1e9 ? "$" + fmt(n / 1e9, 1) + "B" : "$" + fmt(n / 1e6, 0) + "M");
   const pct = (n, d = 1) => (n > 0 ? "+" : "") + fmt(n, d) + "%";
   const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
   const daysTo = (iso) => Math.round((new Date(iso + "T00:00:00") - new Date(META.asOf + "T00:00:00")) / 864e5);
@@ -276,13 +285,15 @@ footer { color: var(--muted); font-size: 12.5px; max-width: 90ch; }
   }
   function syncInputs() {
     $("volPeriod").innerHTML = META.volPeriods.map((p) => `<option${String(p) === S.volPeriod ? " selected" : ""}>${p}</option>`).join("");
-    for (const k of ["volMin", "priceMin", "priceMax", "rsMin", "riskMax", "acct", "riskPct"]) $(k).value = S[k];
+    $("dvPeriod").innerHTML = META.volPeriods.map((p) => `<option${String(p) === S.dvPeriod ? " selected" : ""}>${p}</option>`).join("");
+    for (const k of ["dvMin", "volMin", "priceMin", "priceMax", "rsMin", "riskMax", "acct", "riskPct"]) $(k).value = S[k];
     $("hideEarn").checked = S.hideEarn;
     $("volWan").textContent = S.volMin !== "" ? `(${fmt(S.volMin * 100, 0)} 萬股)` : "";
     renderRules();
   }
   function bindFilters() {
-    for (const k of ["volMin", "priceMin", "priceMax", "rsMin", "riskMax", "acct", "riskPct"])
+    $("dvPeriod").addEventListener("change", (e) => { S.dvPeriod = e.target.value; changed(); });
+    for (const k of ["dvMin", "volMin", "priceMin", "priceMax", "rsMin", "riskMax", "acct", "riskPct"])
       $(k).addEventListener("input", (e) => { S[k] = e.target.value === "" ? "" : Number(e.target.value); changed(k === "acct" || k === "riskPct"); });
     $("volPeriod").addEventListener("change", (e) => { S.volPeriod = e.target.value; changed(); });
     $("hideEarn").addEventListener("change", (e) => { S.hideEarn = e.target.checked; changed(); });
@@ -307,6 +318,7 @@ footer { color: var(--muted); font-size: 12.5px; max-width: 90ch; }
   /* ---------------- filtering ---------------- */
   const side = (r, kind, p) => (kind === "price" ? r.close : r[kind][p]);
   function passes(r) {
+    if (S.dvMin !== "" && r.dvol[S.dvPeriod] < S.dvMin * 1e6) return false;
     if (S.volMin !== "" && r.vol[S.volPeriod] < S.volMin * 1e6) return false;
     if (S.priceMin !== "" && r.close < S.priceMin) return false;
     if (S.priceMax !== "" && S.priceMax > 0 && r.close > S.priceMax) return false;
@@ -335,7 +347,7 @@ footer { color: var(--muted); font-size: 12.5px; max-width: 90ch; }
     ["t", "Ticker", (x) => x.r.t], ["type", "Setup", (x) => x.s.type], ["status", "Status", (x) => STATUS[x.s.status][0]],
     ["score", "Score", (x) => x.s.score], ["close", "Close", (x) => x.r.close], ["chg", "Chg", (x) => x.r.chg],
     ["entry", "Entry", (x) => x.s.entry], ["stop", "Stop", (x) => x.s.stop], ["risk", "Risk", (x) => x.s.risk],
-    ["rs", "RS", (x) => x.r.rs], ["vol", "Avg vol", (x) => x.r.vol[S.volPeriod]], ["earn", "Earnings", (x) => x.r.earn || "9999"],
+    ["rs", "RS", (x) => x.r.rs], ["vol", "$ vol", (x) => x.r.dvol[S.dvPeriod]], ["earn", "Earnings", (x) => x.r.earn || "9999"],
   ];
   function renderList() {
     const all = candidates();
@@ -360,7 +372,7 @@ footer { color: var(--muted); font-size: 12.5px; max-width: 90ch; }
         <td><span class="score num">${s.score}<i><b style="width:${s.score}%"></b></i></span></td>
         <td class="num">${fmt(r.close)}</td><td class="num ${r.chg >= 0 ? "up" : "down"}">${pct(r.chg)}</td>
         <td class="num">${fmt(s.entry)}</td><td class="num">${fmt(s.stop)}</td><td class="num">${fmt(s.risk, 1)}%</td>
-        <td class="num">${r.rs}</td><td class="num">${fmt(r.vol[S.volPeriod] / 1e6, 1)}M</td><td>${earn}</td></tr>`;
+        <td class="num">${r.rs}</td><td class="num">${money(r.dvol[S.dvPeriod])}</td><td>${earn}</td></tr>`;
     }).join("");
     $("empty").hidden = list.length > 0;
     if (!list.length) $("empty").textContent = all.length
@@ -490,11 +502,12 @@ footer { color: var(--muted); font-size: 12.5px; max-width: 90ch; }
     $("regime").innerHTML = `<span class="chip state-${g.state}"><span class="dot"></span>${esc(g.text)}</span>` +
       g.indexes.map((i) => `<span class="chip">${i.ticker} <span class="num ${i.chg >= 0 ? "up" : "down"}">${pct(i.chg, 2)}</span><span class="muted">${i.vs50 >= 0 ? "above" : "below"} 50-day by ${fmt(Math.abs(i.vs50), 1)}%</span></span>`).join("") +
       `<span class="chip"><span class="num">${g.breadth50}%</span><span class="muted">of stocks above 50-day</span></span>`;
-    $("foot").textContent = `Generated ${META.generated} from Yahoo Finance daily bars. The scan covers stocks above $${META.floor.price} with a 10-day average volume over ${fmt(META.floor.volume / 1e6, 1)}M shares, so filters looser than that return nothing extra. Earnings dates from Yahoo are sometimes wrong; check before holding through a report. The setup rules have not been backtested. This is an idea list, not trading advice.`;
+    $("foot").textContent = `Generated ${META.generated} from Yahoo Finance daily bars. The scan covers stocks above $${META.floor.price} that trade over $${fmt(META.floor.dollarVolume / 1e6, 0)}M a day on a 20-day average, so filters looser than that return nothing extra. Earnings dates from Yahoo are sometimes wrong; check before holding through a report. The setup rules have not been backtested. This is an idea list, not trading advice.`;
   }
   fetch("data/scan.json").then((r) => { if (!r.ok) throw new Error(r.status); return r.json(); }).then((d) => {
     META = d.meta; ROWS = d.rows;
     if (!META.volPeriods.map(String).includes(S.volPeriod)) S.volPeriod = "10";
+    if (!META.volPeriods.map(String).includes(S.dvPeriod)) S.dvPeriod = "20";
     renderMeta(); syncInputs(); bindFilters(); bindList(); renderList();
     return fetch("data/bars.json").then((r) => r.json()).then((b) => { BARS = b; redraw(); });
   }).catch((e) => {

@@ -94,7 +94,7 @@ def main(limit=None):
         if len(df) < C.MIN_BARS or df.index[-1] != last_day:
             continue
         c = df["Close"].to_numpy(dtype=float)
-        if c[-1] < C.UNIVERSE_MIN_PRICE or df["Volume"].tail(10).mean() < C.UNIVERSE_MIN_AVG_VOLUME:
+        if c[-1] < C.UNIVERSE_MIN_PRICE or (df["Close"] * df["Volume"]).tail(20).mean() < C.UNIVERSE_MIN_DOLLAR_VOLUME:
             continue
         work[t] = df
         raw[t] = rs_raw(c)
@@ -115,6 +115,7 @@ def main(limit=None):
             "rs": rs[t], "atr": round(a["atr"][-1] / c[-1] * 100, 1),
             "fromHigh": round((c[-1] / hi52 - 1) * 100, 1), "fromLow": round((c[-1] / lo52 - 1) * 100, 1),
             "vol": {str(n): int(a[f"vol{n}"][-1]) for n in C.VOLUME_PERIODS},
+            "dvol": {str(n): int((c[-n:] * a["v"][-n:]).mean()) for n in C.VOLUME_PERIODS},
             "volToday": round(a["v"][-1] / a["vol50"][-1], 2) if a["vol50"][-1] else 0,
             "ema": {str(n): round(a[f"ema{n}"][-1], 3) for n in C.MA_PERIODS},
             "sma": {str(n): round(float(np.nan_to_num(a[f"sma{n}"][-1])), 3) for n in C.MA_PERIODS},
@@ -139,7 +140,7 @@ def main(limit=None):
     meta = {"asOf": last_day.strftime("%Y-%m-%d"),
             "generated": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC"),
             "universe": len(work), "maPeriods": C.MA_PERIODS, "volPeriods": C.VOLUME_PERIODS,
-            "floor": {"price": C.UNIVERSE_MIN_PRICE, "volume": C.UNIVERSE_MIN_AVG_VOLUME},
+            "floor": {"price": C.UNIVERSE_MIN_PRICE, "dollarVolume": C.UNIVERSE_MIN_DOLLAR_VOLUME},
             "regime": regime(idx, above50 / max(1, len(work)))}
     (OUT / "scan.json").write_text(json.dumps({"meta": meta, "rows": rows}, separators=(",", ":")))
     (OUT / "bars.json").write_text(json.dumps({"dates": dates, "bars": chart}, separators=(",", ":")))
