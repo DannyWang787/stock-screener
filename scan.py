@@ -137,13 +137,22 @@ def main(limit=None):
     ref = next(iter(idx.values())) if idx else next(iter(work.values()))
     dates = [d.strftime("%Y-%m-%d") for d in ref.index[-C.CHART_BARS:]]
     OUT.mkdir(parents=True, exist_ok=True)
-    meta = {"asOf": last_day.strftime("%Y-%m-%d"),
+    meta = {"asOf": last_day.strftime("%Y-%m-%d"), "dates": dates,
             "generated": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC"),
             "universe": len(work), "maPeriods": C.MA_PERIODS, "volPeriods": C.VOLUME_PERIODS,
             "floor": {"price": C.UNIVERSE_MIN_PRICE, "dollarVolume": C.UNIVERSE_MIN_DOLLAR_VOLUME},
             "regime": regime(idx, above50 / max(1, len(work)))}
     (OUT / "scan.json").write_text(json.dumps({"meta": meta, "rows": rows}, separators=(",", ":")))
-    (OUT / "bars.json").write_text(json.dumps({"dates": dates, "bars": chart}, separators=(",", ":")))
+    # One small file per candidate, so the dashboard only downloads the chart being viewed.
+    bars_dir = OUT / "bars"
+    bars_dir.mkdir(exist_ok=True)
+    for old in bars_dir.glob("*.json"):
+        old.unlink()
+    for t, b in chart.items():
+        (bars_dir / f"{t}.json").write_text(json.dumps(b, separators=(",", ":")))
+    stale = OUT / "bars.json"
+    if stale.exists():
+        stale.unlink()
     print(f"Done in {time.time() - t0:.0f}s -> {OUT}")
 
 

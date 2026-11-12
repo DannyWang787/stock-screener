@@ -165,6 +165,7 @@ footer { color: var(--muted); font-size: 12.5px; max-width: 90ch; }
     <div class="rule"><button class="btn" id="addRule" type="button">+ Add moving-average rule</button></div>
     <div class="rules-more">
       <label>Relative strength rank ≥ <input class="ctl" id="rsMin" type="number" min="0" max="99" step="5" inputmode="numeric"></label>
+      <label>Minimum score <input class="ctl" id="scoreMin" type="number" min="0" max="100" step="5" inputmode="numeric"></label>
       <label>Max risk to stop <input class="ctl" id="riskMax" type="number" min="0" step="0.5" inputmode="decimal" placeholder="any"> %</label>
       <label><input type="checkbox" id="hideEarn"> Hide stocks reporting earnings within 7 days</label>
     </div>
@@ -209,6 +210,8 @@ footer { color: var(--muted); font-size: 12.5px; max-width: 90ch; }
           <div>
             <h2 id="dSetupName"></h2>
             <dl class="kv" id="dNotes"></dl>
+            <h2 style="margin-top:16px">Score breakdown</h2>
+            <dl class="kv" id="dParts"></dl>
           </div>
           <div class="size">
             <h2>Position size</h2>
@@ -232,7 +235,7 @@ footer { color: var(--muted); font-size: 12.5px; max-width: 90ch; }
   "use strict";
   const $ = (id) => document.getElementById(id);
   const DEFAULTS = {
-    dvPeriod: "20", dvMin: 50, priceMin: 3, priceMax: "", rsMin: 0, riskMax: "", hideEarn: false,
+    dvPeriod: "20", dvMin: 50, priceMin: 3, priceMax: "", rsMin: 0, scoreMin: 0, riskMax: "", hideEarn: false,
     rules: [{ a: "ema", ap: "20", op: ">", b: "ema", bp: "50" }, { a: "ema", ap: "10", op: ">", b: "ema", bp: "50" }],
     setup: "all", status: { setup: true, go: true, ext: false },
     sort: { key: "score", dir: -1 }, acct: 50000, riskPct: 1,
@@ -243,7 +246,7 @@ footer { color: var(--muted); font-size: 12.5px; max-width: 90ch; }
   };
   const clone = (o) => JSON.parse(JSON.stringify(o));
   let S = Object.assign(clone(DEFAULTS), store.get() || {});
-  let META = null, ROWS = [], BARS = null, selected = null, chart = null, series = {};
+  let META = null, ROWS = [], BARS = {}, selected = null, chart = null, series = {};
 
   const SETUP_NAME = { pullback: "Pullback", flatbase: "Flat base" };
   const STATUS = {
@@ -277,13 +280,13 @@ footer { color: var(--muted); font-size: 12.5px; max-width: 90ch; }
   }
   function syncInputs() {
     $("dvPeriod").innerHTML = META.volPeriods.map((p) => `<option${String(p) === S.dvPeriod ? " selected" : ""}>${p}</option>`).join("");
-    for (const k of ["dvMin", "priceMin", "priceMax", "rsMin", "riskMax", "acct", "riskPct"]) $(k).value = S[k];
+    for (const k of ["dvMin", "priceMin", "priceMax", "rsMin", "scoreMin", "riskMax", "acct", "riskPct"]) $(k).value = S[k];
     $("hideEarn").checked = S.hideEarn;
     renderRules();
   }
   function bindFilters() {
     $("dvPeriod").addEventListener("change", (e) => { S.dvPeriod = e.target.value; changed(); });
-    for (const k of ["dvMin", "priceMin", "priceMax", "rsMin", "riskMax", "acct", "riskPct"])
+    for (const k of ["dvMin", "priceMin", "priceMax", "rsMin", "scoreMin", "riskMax", "acct", "riskPct"])
       $(k).addEventListener("input", (e) => { S[k] = e.target.value === "" ? "" : Number(e.target.value); changed(k === "acct" || k === "riskPct"); });
     $("hideEarn").addEventListener("change", (e) => { S.hideEarn = e.target.checked; changed(); });
     $("maRules").addEventListener("change", (e) => {
@@ -323,6 +326,7 @@ footer { color: var(--muted); font-size: 12.5px; max-width: 90ch; }
       if (!passes(r)) continue;
       for (const s of r.setups) {
         if (S.riskMax !== "" && S.riskMax > 0 && s.risk > S.riskMax) continue;
+        if (S.scoreMin !== "" && s.score < S.scoreMin) continue;
         out.push({ r, s, id: r.t + ":" + s.type });
       }
     }
@@ -400,6 +404,8 @@ footer { color: var(--muted); font-size: 12.5px; max-width: 90ch; }
     $("dSetupName").textContent = SETUP_NAME[s.type] + " details";
     const extra = { "Score": s.score + " / 100", "RS rank": r.rs, "ATR": fmt(r.atr, 1) + "% of price", "From 52-week high": pct(r.fromHigh), "Volume today": fmt(r.volToday, 2) + "x avg" };
     $("dNotes").innerHTML = Object.entries(Object.assign({}, s.notes, extra)).map(([k, v]) => `<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join("");
+    $("dParts").innerHTML = (s.parts || []).map(([k, got, max]) => `<dt>${esc(k)}</dt><dd class="${got <= max * 0.4 ? "down" : ""}">${got} / ${max}</dd>`).join("") +
+      `<dt><strong>Total</strong></dt><dd><strong>${s.score} / 100</strong></dd>`;
     const notes = [];
     if (r.earn) { const d = daysTo(r.earn); if (d >= 0 && d <= 14) notes.push(`Earnings expected ${r.earn} (in ${d} days). A swing trade may be held through the report.`); }
     if (s.status === "extended") notes.push(`Price is ${fmt(s.ext, 1)}% above the entry. Buying here means chasing.`);
@@ -433,8 +439,17 @@ footer { color: var(--muted); font-size: 12.5px; max-width: 90ch; }
   function drawChart(x) {
     const el = $("chart");
     if (!window.LightweightCharts) { el.innerHTML = '<div class="empty">The chart library did not load. Levels below are still correct.</div>'; return; }
-    if (!BARS) { el.innerHTML = '<div class="empty">Loading price history…</div>'; return; }
-    const b = BARS.bars[x.r.t];
+    const tk = x.r.t;
+    if (BARS[tk] === undefined) {
+      BARS[tk] = null;
+      el.innerHTML = '<div class="empty">Loading price history…</div>';
+      fetch("data/bars/" + tk + ".json").then((r) => { if (!r.ok) throw new Error(r.status); return r.json(); })
+        .then((b) => { BARS[tk] = b; }).catch(() => { BARS[tk] = false; })
+        .then(() => { if (current && current.r.t === tk) drawChart(current); });
+      return;
+    }
+    if (BARS[tk] === null) return;
+    const b = BARS[tk];
     if (!b) { el.innerHTML = '<div class="empty">No price history for this ticker.</div>'; return; }
     el.innerHTML = "";
     const P = palette(), LC = window.LightweightCharts;
@@ -446,7 +461,7 @@ footer { color: var(--muted); font-size: 12.5px; max-width: 90ch; }
       rightPriceScale: { borderColor: P.line }, timeScale: { borderColor: P.line, rightOffset: 4 },
       crosshair: { mode: LC.CrosshairMode.Normal }, handleScale: { axisPressedMouseMove: true },
     });
-    const dates = BARS.dates.slice(-b.n), s = x.s;
+    const dates = META.dates.slice(-b.n), s = x.s;
     const candle = chart.addCandlestickSeries({ upColor: P.up, downColor: P.down, borderUpColor: P.up, borderDownColor: P.down, wickUpColor: P.up, wickDownColor: P.down, priceLineVisible: false });
     candle.setData(dates.map((t, i) => ({ time: t, open: b.o[i], high: b.h[i], low: b.l[i], close: b.c[i] })));
     const vol = chart.addHistogramSeries({ priceScaleId: "vol", priceFormat: { type: "volume" }, lastValueVisible: false, priceLineVisible: false });
@@ -495,7 +510,7 @@ footer { color: var(--muted); font-size: 12.5px; max-width: 90ch; }
     META = d.meta; ROWS = d.rows;
     if (!META.volPeriods.map(String).includes(S.dvPeriod)) S.dvPeriod = "20";
     renderMeta(); syncInputs(); bindFilters(); bindList(); renderList();
-    return fetch("data/bars.json").then((r) => r.json()).then((b) => { BARS = b; redraw(); });
+
   }).catch((e) => {
     $("asof").textContent = "Could not load the scan data (data/scan.json). Run the scan first: python scan.py";
     console.error(e);
