@@ -1,0 +1,505 @@
+<title>Swing Setup Screener</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Space+Grotesk:wght@500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: a trading desk sheet. Regime strip on top, the filter rules as a
+   row-per-condition panel (like a broker screener), then ranked list left and
+   the selected ticket (chart + levels + sizing) right. */
+:root {
+  --bg: #f3f5f8; --panel: #ffffff; --panel-2: #eaeef3; --line: #d6dce5;
+  --fg: #141a24; --muted: #5a6577; --accent: #1f5fd1; --accent-soft: #e2ebfb;
+  --up: #0f8a5f; --down: #cc3340; --warn: #a66300; --warn-soft: #fbefd6;
+  --up-soft: #dcf3ea; --down-soft: #fbe3e5;
+  --font-display: "Space Grotesk", "Inter", system-ui, sans-serif;
+  --font-body: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-data: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0e1218; --panel: #161c25; --panel-2: #1e2632; --line: #2b3545;
+    --fg: #e6ebf2; --muted: #93a0b4; --accent: #6ea4ff; --accent-soft: #1c2c49;
+    --up: #3ecf96; --down: #ff6b78; --warn: #f0b24a; --warn-soft: #3a2c10;
+    --up-soft: #12352a; --down-soft: #3d1c21; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0e1218; --panel: #161c25; --panel-2: #1e2632; --line: #2b3545;
+  --fg: #e6ebf2; --muted: #93a0b4; --accent: #6ea4ff; --accent-soft: #1c2c49;
+  --up: #3ecf96; --down: #ff6b78; --warn: #f0b24a; --warn-soft: #3a2c10;
+  --up-soft: #12352a; --down-soft: #3d1c21; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body {
+  background: var(--bg); color: var(--fg); font-family: var(--font-body); font-size: 14px; line-height: 1.45;
+  padding-block: 20px 40px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+.wrap { max-width: 1480px; margin: 0 auto; display: flex; flex-direction: column; gap: 16px; }
+h1 { font-family: var(--font-display); font-size: 22px; font-weight: 600; margin: 0; letter-spacing: -0.01em; }
+h2 { font-family: var(--font-display); font-size: 15px; font-weight: 600; margin: 0; }
+.num { font-family: var(--font-data); font-variant-numeric: tabular-nums; }
+.muted { color: var(--muted); }
+.up { color: var(--up); } .down { color: var(--down); }
+button, input, select { font: inherit; color: inherit; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+/* header */
+.top { display: flex; flex-wrap: wrap; gap: 12px 24px; align-items: flex-end; justify-content: space-between; }
+.top .sub { color: var(--muted); font-size: 13px; margin-top: 2px; }
+.regime { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.chip { display: inline-flex; gap: 6px; align-items: center; padding: 4px 10px; border-radius: 999px; font-size: 12.5px;
+  background: var(--panel); border: 1px solid var(--line); white-space: nowrap; }
+.chip.state-up { background: var(--up-soft); border-color: transparent; color: var(--up); font-weight: 600; }
+.chip.state-mixed { background: var(--warn-soft); border-color: transparent; color: var(--warn); font-weight: 600; }
+.chip.state-down { background: var(--down-soft); border-color: transparent; color: var(--down); font-weight: 600; }
+.dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+
+/* filters */
+.panel { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; }
+.filters { padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; }
+.filters-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
+.rule { display: flex; flex-wrap: wrap; gap: 6px 8px; align-items: center; }
+.rule .name { width: 108px; font-weight: 500; }
+.rule .hint { color: var(--muted); font-size: 12.5px; }
+.ctl { background: var(--panel-2); border: 1px solid var(--line); border-radius: 6px; padding: 5px 8px; min-height: 30px; }
+input.ctl { width: 84px; font-family: var(--font-data); }
+select.ctl { padding-right: 4px; }
+.btn { background: var(--panel-2); border: 1px solid var(--line); border-radius: 6px; padding: 5px 10px; cursor: pointer; min-height: 30px; }
+.btn:hover { border-color: var(--accent); }
+.btn.ghost { background: transparent; }
+.btn.x { padding: 5px 9px; color: var(--muted); }
+.rules-more { display: flex; flex-wrap: wrap; gap: 8px 20px; align-items: center; padding-top: 10px; border-top: 1px solid var(--line); }
+.rules-more label { display: inline-flex; gap: 8px; align-items: center; }
+
+/* main split */
+.main { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 16px; align-items: start; }
+@media (max-width: 1080px) { .main { grid-template-columns: minmax(0, 1fr); } }
+.list-head { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; justify-content: space-between; padding: 12px 14px; border-bottom: 1px solid var(--line); }
+.seg { display: inline-flex; background: var(--panel-2); border-radius: 8px; padding: 3px; gap: 2px; }
+.seg button { border: 0; background: transparent; padding: 5px 11px; border-radius: 6px; cursor: pointer; white-space: nowrap; }
+.seg button[aria-pressed="true"] { background: var(--panel); box-shadow: 0 0 0 1px var(--line); font-weight: 600; }
+.seg .n { color: var(--muted); font-family: var(--font-data); font-size: 12px; margin-left: 4px; }
+.toggles { display: flex; flex-wrap: wrap; gap: 6px; }
+.tog { border: 1px solid var(--line); background: transparent; border-radius: 999px; padding: 4px 11px; cursor: pointer; font-size: 12.5px; color: var(--muted); }
+.tog[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent); border-color: transparent; font-weight: 600; }
+.table-scroll { overflow: auto; max-height: 720px; }
+table { border-collapse: collapse; width: 100%; font-size: 13px; }
+th { position: sticky; top: 0; background: var(--panel); text-align: right; font-weight: 500; color: var(--muted); font-size: 11.5px;
+  text-transform: uppercase; letter-spacing: 0.05em; padding: 8px 7px; border-bottom: 1px solid var(--line); cursor: pointer; white-space: nowrap; user-select: none; }
+th:first-child, td:first-child, th.l, td.l { text-align: left; }
+th[aria-sort] { color: var(--fg); }
+td { padding: 7px 7px; border-bottom: 1px solid var(--line); text-align: right; white-space: nowrap; }
+tbody tr { cursor: pointer; }
+tbody tr:hover { background: var(--panel-2); }
+tbody tr[aria-selected="true"] { background: var(--accent-soft); }
+.tk { font-family: var(--font-display); font-weight: 600; font-size: 14px; }
+.nm { color: var(--muted); font-size: 12px; max-width: 120px; overflow: hidden; text-overflow: ellipsis; }
+.pill { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 12px; font-weight: 500; background: var(--panel-2); }
+.pill.s-setup { background: var(--panel-2); color: var(--muted); }
+.pill.s-go { background: var(--up-soft); color: var(--up); font-weight: 600; }
+.pill.s-ext { background: var(--warn-soft); color: var(--warn); }
+.pill.earn { background: var(--warn-soft); color: var(--warn); }
+.score { display: inline-flex; align-items: center; gap: 6px; justify-content: flex-end; }
+.score i { display: block; width: 34px; height: 5px; border-radius: 3px; background: var(--panel-2); overflow: hidden; }
+.score i b { display: block; height: 100%; background: var(--accent); }
+.empty { padding: 36px 16px; text-align: center; color: var(--muted); }
+
+/* ticket */
+.ticket { position: sticky; top: 12px; display: flex; flex-direction: column; }
+@media (max-width: 1080px) { .ticket { position: static; } }
+.ticket-head { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: baseline; justify-content: space-between; padding: 14px 16px 10px; }
+.ticket-head .tk { font-size: 22px; }
+.ticket-head .px { font-size: 16px; }
+.legend { display: flex; flex-wrap: wrap; gap: 4px 14px; padding: 0 16px 6px; font-size: 12px; color: var(--muted); }
+.legend span::before { content: ""; display: inline-block; width: 12px; height: 2px; margin-right: 5px; vertical-align: middle; background: var(--c); }
+#chart { height: 380px; width: 100%; }
+.levels { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+.levels div { padding: 10px 14px; border-right: 1px solid var(--line); min-width: 0; }
+.levels div:last-child { border-right: 0; }
+.levels dt, .kv dt, .size dt { font-size: 11.5px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; }
+.levels dd { margin: 2px 0 0; font-family: var(--font-data); font-size: 16px; font-weight: 500; }
+@media (max-width: 520px) { .levels { grid-template-columns: repeat(2, minmax(0, 1fr)); } .levels div:nth-child(2) { border-right: 0; } .levels div:nth-child(-n+2) { border-bottom: 1px solid var(--line); } #chart { height: 300px; } }
+.ticket-body { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 16px 24px; padding: 14px 16px 16px; }
+.kv { display: grid; grid-template-columns: auto auto; gap: 5px 12px; margin: 8px 0 0; }
+.kv dd { margin: 0; text-align: right; font-family: var(--font-data); font-size: 13px; }
+.kv dt { text-transform: none; letter-spacing: 0; font-size: 13px; }
+.size-in { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+.size-in label { display: flex; flex-direction: column; gap: 3px; font-size: 12px; color: var(--muted); }
+.size-in input { width: 110px; }
+.size-out { margin-top: 10px; font-size: 13px; }
+.size-out strong { font-family: var(--font-data); font-size: 18px; font-weight: 500; }
+.note { margin: 0 16px 12px; padding: 8px 12px; border-radius: 6px; background: var(--warn-soft); color: var(--warn); font-size: 13px; }
+footer { color: var(--muted); font-size: 12.5px; max-width: 90ch; }
+</style>
+
+<div class="wrap">
+  <header class="top">
+    <div>
+      <h1>Swing Setup Screener</h1>
+      <div class="sub" id="asof">Loading scan…</div>
+    </div>
+    <div class="regime" id="regime"></div>
+  </header>
+
+  <section class="panel filters" aria-label="Screen filters">
+    <div class="filters-head">
+      <h2>Filters</h2>
+      <button class="btn ghost" id="reset" type="button">Reset to my defaults</button>
+    </div>
+    <div class="rule">
+      <span class="name">Volume</span>
+      <span class="hint">average of last</span>
+      <select class="ctl" id="volPeriod" aria-label="Volume averaging period"></select>
+      <span class="hint">days ≥</span>
+      <input class="ctl" id="volMin" type="number" min="0" step="0.5" inputmode="decimal" aria-label="Minimum average volume in million shares">
+      <span class="hint">M shares <span id="volWan"></span></span>
+    </div>
+    <div class="rule">
+      <span class="name">Price</span>
+      <input class="ctl" id="priceMin" type="number" min="0" step="1" inputmode="decimal" aria-label="Minimum price">
+      <span class="hint">to</span>
+      <input class="ctl" id="priceMax" type="number" min="0" step="1" inputmode="decimal" placeholder="no max" aria-label="Maximum price">
+    </div>
+    <div id="maRules"></div>
+    <div class="rule"><button class="btn" id="addRule" type="button">+ Add moving-average rule</button></div>
+    <div class="rules-more">
+      <label>Relative strength rank ≥ <input class="ctl" id="rsMin" type="number" min="0" max="99" step="5" inputmode="numeric"></label>
+      <label>Max risk to stop <input class="ctl" id="riskMax" type="number" min="0" step="0.5" inputmode="decimal" placeholder="any"> %</label>
+      <label><input type="checkbox" id="hideEarn"> Hide stocks reporting earnings within 7 days</label>
+    </div>
+  </section>
+
+  <div class="main">
+    <section class="panel" aria-label="Candidates">
+      <div class="list-head">
+        <div class="seg" id="setupSeg" role="group" aria-label="Setup type"></div>
+        <div class="toggles" id="statusTog" role="group" aria-label="Status"></div>
+      </div>
+      <div class="table-scroll">
+        <table>
+          <thead><tr id="thead"></tr></thead>
+          <tbody id="tbody"></tbody>
+        </table>
+        <div class="empty" id="empty" hidden></div>
+      </div>
+    </section>
+
+    <section class="panel ticket" id="ticket" aria-label="Selected candidate">
+      <div class="empty" id="ticketEmpty">Select a candidate to see its chart and trade levels.</div>
+      <div id="ticketBody" hidden>
+        <div class="ticket-head">
+          <div><span class="tk" id="dTk"></span> <span class="muted" id="dNm"></span></div>
+          <div><span class="num px" id="dPx"></span> <span class="num" id="dChg"></span> <span id="dPills"></span></div>
+        </div>
+        <div class="legend">
+          <span style="--c: var(--ma10)">EMA 10</span><span style="--c: var(--ma20)">EMA 20</span>
+          <span style="--c: var(--ma50)">EMA 50</span><span style="--c: var(--ma200)">EMA 200</span>
+          <span id="lgRes" style="--c: var(--down)" hidden>Resistance zone</span><span id="lgSup" style="--c: var(--up)" hidden>Support zone</span>
+        </div>
+        <div id="chart"></div>
+        <dl class="levels">
+          <div><dt>Entry</dt><dd id="dEntry"></dd></div>
+          <div><dt>Stop</dt><dd id="dStop" class="down"></dd></div>
+          <div><dt>Target (2R)</dt><dd id="dTarget" class="up"></dd></div>
+          <div><dt>Risk</dt><dd id="dRisk"></dd></div>
+        </dl>
+        <div class="note" id="dNote" hidden style="margin-top:12px"></div>
+        <div class="ticket-body">
+          <div>
+            <h2 id="dSetupName"></h2>
+            <dl class="kv" id="dNotes"></dl>
+          </div>
+          <div class="size">
+            <h2>Position size</h2>
+            <div class="size-in">
+              <label>Account ($)<input class="ctl" id="acct" type="number" min="0" step="1000" inputmode="numeric"></label>
+              <label>Risk per trade (%)<input class="ctl" id="riskPct" type="number" min="0" step="0.25" inputmode="decimal"></label>
+            </div>
+            <div class="size-out" id="sizeOut"></div>
+          </div>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <footer id="foot"></footer>
+</div>
+
+<script src="https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
+<script>
+(function () {
+  "use strict";
+  const $ = (id) => document.getElementById(id);
+  const DEFAULTS = {
+    volPeriod: "10", volMin: 5, priceMin: 3, priceMax: "", rsMin: 0, riskMax: "", hideEarn: false,
+    rules: [{ a: "ema", ap: "20", op: ">", b: "ema", bp: "50" }, { a: "ema", ap: "10", op: ">", b: "ema", bp: "50" }],
+    setup: "all", status: { setup: true, go: true, ext: false },
+    sort: { key: "score", dir: -1 }, acct: 50000, riskPct: 1,
+  };
+  const store = {
+    get() { try { return JSON.parse(localStorage.getItem("swing-screener") || "null"); } catch (e) { return null; } },
+    set(v) { try { localStorage.setItem("swing-screener", JSON.stringify(v)); } catch (e) { /* storage unavailable */ } },
+  };
+  const clone = (o) => JSON.parse(JSON.stringify(o));
+  let S = Object.assign(clone(DEFAULTS), store.get() || {});
+  let META = null, ROWS = [], BARS = null, selected = null, chart = null, series = {};
+
+  const SETUP_NAME = { pullback: "Pullback", flatbase: "Flat base" };
+  const STATUS = {
+    setup: ["Setting up", "s-setup", "setup"], triggered: ["Triggered", "s-go", "go"],
+    breakout: ["Breaking out", "s-go", "go"], buyrange: ["In buy range", "s-go", "go"], extended: ["Extended", "s-ext", "ext"],
+  };
+  const fmt = (n, d = 2) => (n == null || isNaN(n) ? "–" : Number(n).toLocaleString("en-US", { minimumFractionDigits: d, maximumFractionDigits: d }));
+  const pct = (n, d = 1) => (n > 0 ? "+" : "") + fmt(n, d) + "%";
+  const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+  const daysTo = (iso) => Math.round((new Date(iso + "T00:00:00") - new Date(META.asOf + "T00:00:00")) / 864e5);
+
+  /* ---------------- filters UI ---------------- */
+  function maOptions(sel, withPrice) {
+    return (withPrice ? `<option value="price"${sel === "price" ? " selected" : ""}>Price</option>` : "") +
+      ["ema", "sma"].map((k) => `<option value="${k}"${sel === k ? " selected" : ""}>${k.toUpperCase()}</option>`).join("");
+  }
+  const perOptions = (sel) => META.maPeriods.map((p) => `<option${String(p) === String(sel) ? " selected" : ""}>${p}</option>`).join("");
+  function renderRules() {
+    $("maRules").innerHTML = S.rules.map((r, i) => `
+      <div class="rule" style="margin-bottom:10px">
+        <span class="name">Daily MA</span>
+        <select class="ctl" id="r${i}a" data-i="${i}" data-k="a" aria-label="Left side">${maOptions(r.a, true)}</select>
+        <select class="ctl" id="r${i}ap" data-i="${i}" data-k="ap" aria-label="Left period"${r.a === "price" ? " hidden" : ""}>${perOptions(r.ap)}</select>
+        <select class="ctl" id="r${i}op" data-i="${i}" data-k="op" aria-label="Comparison">
+          <option value=">"${r.op === ">" ? " selected" : ""}>above</option><option value="<"${r.op === "<" ? " selected" : ""}>below</option></select>
+        <select class="ctl" id="r${i}b" data-i="${i}" data-k="b" aria-label="Right side">${maOptions(r.b, false)}</select>
+        <select class="ctl" id="r${i}bp" data-i="${i}" data-k="bp" aria-label="Right period">${perOptions(r.bp)}</select>
+        <button class="btn x" type="button" data-del="${i}" aria-label="Remove rule">✕</button>
+      </div>`).join("");
+  }
+  function syncInputs() {
+    $("volPeriod").innerHTML = META.volPeriods.map((p) => `<option${String(p) === S.volPeriod ? " selected" : ""}>${p}</option>`).join("");
+    for (const k of ["volMin", "priceMin", "priceMax", "rsMin", "riskMax", "acct", "riskPct"]) $(k).value = S[k];
+    $("hideEarn").checked = S.hideEarn;
+    $("volWan").textContent = S.volMin !== "" ? `(${fmt(S.volMin * 100, 0)} 萬股)` : "";
+    renderRules();
+  }
+  function bindFilters() {
+    for (const k of ["volMin", "priceMin", "priceMax", "rsMin", "riskMax", "acct", "riskPct"])
+      $(k).addEventListener("input", (e) => { S[k] = e.target.value === "" ? "" : Number(e.target.value); changed(k === "acct" || k === "riskPct"); });
+    $("volPeriod").addEventListener("change", (e) => { S.volPeriod = e.target.value; changed(); });
+    $("hideEarn").addEventListener("change", (e) => { S.hideEarn = e.target.checked; changed(); });
+    $("maRules").addEventListener("change", (e) => {
+      const d = e.target.dataset; if (d.i == null) return;
+      S.rules[d.i][d.k] = e.target.value; renderRules(); changed();
+    });
+    $("maRules").addEventListener("click", (e) => {
+      const b = e.target.closest("[data-del]"); if (!b) return;
+      S.rules.splice(Number(b.dataset.del), 1); renderRules(); changed();
+    });
+    $("addRule").addEventListener("click", () => { S.rules.push({ a: "price", ap: "20", op: ">", b: "ema", bp: "50" }); renderRules(); changed(); });
+    $("reset").addEventListener("click", () => { const keep = { acct: S.acct, riskPct: S.riskPct }; S = Object.assign(clone(DEFAULTS), keep); syncInputs(); changed(); });
+  }
+  function changed(sizeOnly) {
+    store.set(S);
+    $("volWan").textContent = S.volMin !== "" ? `(${fmt(S.volMin * 100, 0)} 萬股)` : "";
+    if (sizeOnly) return renderSize();
+    renderList();
+  }
+
+  /* ---------------- filtering ---------------- */
+  const side = (r, kind, p) => (kind === "price" ? r.close : r[kind][p]);
+  function passes(r) {
+    if (S.volMin !== "" && r.vol[S.volPeriod] < S.volMin * 1e6) return false;
+    if (S.priceMin !== "" && r.close < S.priceMin) return false;
+    if (S.priceMax !== "" && S.priceMax > 0 && r.close > S.priceMax) return false;
+    if (S.rsMin !== "" && r.rs < S.rsMin) return false;
+    if (S.hideEarn && r.earn) { const d = daysTo(r.earn); if (d >= 0 && d <= 7) return false; }
+    for (const q of S.rules) {
+      const a = side(r, q.a, q.ap), b = side(r, q.b, q.bp);
+      if (!(q.op === ">" ? a > b : a < b)) return false;
+    }
+    return true;
+  }
+  function candidates() {
+    const out = [];
+    for (const r of ROWS) {
+      if (!passes(r)) continue;
+      for (const s of r.setups) {
+        if (S.riskMax !== "" && S.riskMax > 0 && s.risk > S.riskMax) continue;
+        out.push({ r, s, id: r.t + ":" + s.type });
+      }
+    }
+    return out;
+  }
+
+  /* ---------------- list ---------------- */
+  const COLS = [
+    ["t", "Ticker", (x) => x.r.t], ["type", "Setup", (x) => x.s.type], ["status", "Status", (x) => STATUS[x.s.status][0]],
+    ["score", "Score", (x) => x.s.score], ["close", "Close", (x) => x.r.close], ["chg", "Chg", (x) => x.r.chg],
+    ["entry", "Entry", (x) => x.s.entry], ["stop", "Stop", (x) => x.s.stop], ["risk", "Risk", (x) => x.s.risk],
+    ["rs", "RS", (x) => x.r.rs], ["vol", "Avg vol", (x) => x.r.vol[S.volPeriod]], ["earn", "Earnings", (x) => x.r.earn || "9999"],
+  ];
+  function renderList() {
+    const all = candidates();
+    const counts = { all: all.length, pullback: 0, flatbase: 0 };
+    all.forEach((x) => counts[x.s.type]++);
+    $("setupSeg").innerHTML = [["all", "All"], ["pullback", "Pullback"], ["flatbase", "Flat base"]]
+      .map(([k, l]) => `<button type="button" data-setup="${k}" aria-pressed="${S.setup === k}">${l}<span class="n">${counts[k]}</span></button>`).join("");
+    $("statusTog").innerHTML = [["setup", "Setting up"], ["go", "Triggered"], ["ext", "Extended"]]
+      .map(([k, l]) => `<button type="button" class="tog" data-status="${k}" aria-pressed="${!!S.status[k]}">${l}</button>`).join("");
+    const col = COLS.find((c) => c[0] === S.sort.key) || COLS[3];
+    const list = all.filter((x) => (S.setup === "all" || x.s.type === S.setup) && S.status[STATUS[x.s.status][2]])
+      .sort((a, b) => { const va = col[2](a), vb = col[2](b); return (va > vb ? 1 : va < vb ? -1 : b.s.score - a.s.score) * S.sort.dir; });
+    $("thead").innerHTML = COLS.map((c) => `<th data-key="${c[0]}" class="${c[0] === "type" || c[0] === "status" ? "l" : ""}"${c[0] === S.sort.key ? ` aria-sort="${S.sort.dir > 0 ? "ascending" : "descending"}"` : ""}>${c[1]}${c[0] === S.sort.key ? (S.sort.dir > 0 ? " ↑" : " ↓") : ""}</th>`).join("");
+    $("tbody").innerHTML = list.map((x) => {
+      const { r, s } = x, st = STATUS[s.status];
+      let earn = "<span class='muted'>–</span>";
+      if (r.earn) { const d = daysTo(r.earn); earn = d >= 0 && d <= 14 ? `<span class="pill earn">in ${d}d</span>` : `<span class="muted num">${r.earn.slice(5)}</span>`; }
+      return `<tr data-id="${x.id}" aria-selected="${x.id === selected}" tabindex="0">
+        <td><div class="tk">${r.t}</div><div class="nm">${esc(r.name)}</div></td>
+        <td class="l">${SETUP_NAME[s.type]}</td>
+        <td class="l"><span class="pill ${st[1]}">${st[0]}</span></td>
+        <td><span class="score num">${s.score}<i><b style="width:${s.score}%"></b></i></span></td>
+        <td class="num">${fmt(r.close)}</td><td class="num ${r.chg >= 0 ? "up" : "down"}">${pct(r.chg)}</td>
+        <td class="num">${fmt(s.entry)}</td><td class="num">${fmt(s.stop)}</td><td class="num">${fmt(s.risk, 1)}%</td>
+        <td class="num">${r.rs}</td><td class="num">${fmt(r.vol[S.volPeriod] / 1e6, 1)}M</td><td>${earn}</td></tr>`;
+    }).join("");
+    $("empty").hidden = list.length > 0;
+    if (!list.length) $("empty").textContent = all.length
+      ? "No candidates with these status toggles. Turn on Setting up, Triggered or Extended."
+      : "No stock passes these filters. Lower the volume minimum or remove a moving-average rule.";
+    if (!list.some((x) => x.id === selected)) select(list.length ? list[0].id : null, list);
+    LIST = list;
+  }
+  let LIST = [];
+  function bindList() {
+    $("setupSeg").addEventListener("click", (e) => { const b = e.target.closest("[data-setup]"); if (b) { S.setup = b.dataset.setup; changed(); } });
+    $("statusTog").addEventListener("click", (e) => { const b = e.target.closest("[data-status]"); if (b) { S.status[b.dataset.status] = !S.status[b.dataset.status]; changed(); } });
+    $("thead").addEventListener("click", (e) => {
+      const th = e.target.closest("th"); if (!th) return;
+      const k = th.dataset.key;
+      S.sort = { key: k, dir: S.sort.key === k ? -S.sort.dir : (k === "t" || k === "type" || k === "status" || k === "earn" ? 1 : -1) };
+      changed();
+    });
+    const pick = (e) => { const tr = e.target.closest("tr[data-id]"); if (tr) { select(tr.dataset.id); if (window.innerWidth <= 1080) $("ticket").scrollIntoView({ behavior: "smooth", block: "start" }); } };
+    $("tbody").addEventListener("click", pick);
+    $("tbody").addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); pick(e); } });
+  }
+
+  /* ---------------- ticket ---------------- */
+  function select(id, list) {
+    selected = id;
+    document.querySelectorAll("#tbody tr").forEach((tr) => tr.setAttribute("aria-selected", tr.dataset.id === id));
+    const x = (list || LIST).find((c) => c.id === id) || candidates().find((c) => c.id === id);
+    $("ticketEmpty").hidden = !!x; $("ticketBody").hidden = !x;
+    if (!x) return;
+    const { r, s } = x, st = STATUS[s.status];
+    $("dTk").textContent = r.t; $("dNm").textContent = r.name;
+    $("dPx").textContent = fmt(r.close);
+    $("dChg").textContent = pct(r.chg, 2); $("dChg").className = "num " + (r.chg >= 0 ? "up" : "down");
+    $("dPills").innerHTML = `<span class="pill">${SETUP_NAME[s.type]}</span> <span class="pill ${st[1]}">${st[0]}</span>`;
+    $("dEntry").textContent = fmt(s.entry); $("dStop").textContent = fmt(s.stop); $("dTarget").textContent = fmt(s.target);
+    $("dRisk").textContent = fmt(s.risk, 1) + "%";
+    $("dSetupName").textContent = SETUP_NAME[s.type] + " details";
+    const extra = { "Score": s.score + " / 100", "RS rank": r.rs, "ATR": fmt(r.atr, 1) + "% of price", "From 52-week high": pct(r.fromHigh), "Volume today": fmt(r.volToday, 2) + "x avg" };
+    $("dNotes").innerHTML = Object.entries(Object.assign({}, s.notes, extra)).map(([k, v]) => `<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join("");
+    const notes = [];
+    if (r.earn) { const d = daysTo(r.earn); if (d >= 0 && d <= 14) notes.push(`Earnings expected ${r.earn} (in ${d} days). A swing trade may be held through the report.`); }
+    if (s.status === "extended") notes.push(`Price is ${fmt(s.ext, 1)}% above the entry. Buying here means chasing.`);
+    $("dNote").hidden = !notes.length; $("dNote").textContent = notes.join(" ");
+    $("lgRes").hidden = $("lgSup").hidden = s.type !== "flatbase";
+    current = x; renderSize(); drawChart(x);
+  }
+  let current = null;
+  function renderSize() {
+    if (!current) return;
+    const s = current.s, perShare = s.entry - s.stop, risk$ = (Number(S.acct) || 0) * (Number(S.riskPct) || 0) / 100;
+    if (!(risk$ > 0) || !(perShare > 0)) { $("sizeOut").textContent = "Enter an account size and risk percent."; return; }
+    let shares = Math.floor(risk$ / perShare), capped = false;
+    if (shares * s.entry > S.acct) { shares = Math.floor(S.acct / s.entry); capped = true; }
+    const value = shares * s.entry;
+    $("sizeOut").innerHTML = `<strong>${shares.toLocaleString("en-US")}</strong> shares · $${fmt(value, 0)} (${fmt(value / S.acct * 100, 0)}% of account)<br>
+      <span class="muted">Loss at stop $${fmt(shares * perShare, 0)} · gain at target $${fmt(shares * (s.target - s.entry), 0)}${capped ? " · capped at account size" : ""}</span>`;
+  }
+
+  /* ---------------- chart ---------------- */
+  const css = (v) => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+  function palette() {
+    const dark = css("--bg").toLowerCase() === "#0e1218";
+    const p = { fg: css("--fg"), muted: css("--muted"), line: css("--line"), up: css("--up"), down: css("--down"), accent: css("--accent"),
+      ma10: dark ? "#f0b24a" : "#c77700", ma20: dark ? "#6ea4ff" : "#1f5fd1", ma50: dark ? "#c58bff" : "#8a3fd1", ma200: dark ? "#93a0b4" : "#5a6577" };
+    for (const k of ["ma10", "ma20", "ma50", "ma200"]) document.documentElement.style.setProperty("--" + k, p[k]);
+    return p;
+  }
+  function emaArr(c, n, seed) { const k = 2 / (n + 1), out = []; let e = seed == null ? c[0] : seed; for (let i = 0; i < c.length; i++) { e = i ? c[i] * k + e * (1 - k) : e; out.push(e); } return out; }
+  function smaArr(c, n) { const out = []; let sum = 0; for (let i = 0; i < c.length; i++) { sum += c[i]; if (i >= n) sum -= c[i - n]; out.push(i >= n - 1 ? sum / n : null); } return out; }
+  function drawChart(x) {
+    const el = $("chart");
+    if (!window.LightweightCharts) { el.innerHTML = '<div class="empty">The chart library did not load. Levels below are still correct.</div>'; return; }
+    if (!BARS) { el.innerHTML = '<div class="empty">Loading price history…</div>'; return; }
+    const b = BARS.bars[x.r.t];
+    if (!b) { el.innerHTML = '<div class="empty">No price history for this ticker.</div>'; return; }
+    el.innerHTML = "";
+    const P = palette(), LC = window.LightweightCharts;
+    if (chart) chart.remove();
+    chart = LC.createChart(el, {
+      autoSize: true,
+      layout: { background: { color: "transparent" }, textColor: P.muted, fontFamily: css("--font-data") || "monospace", fontSize: 11 },
+      grid: { vertLines: { color: "transparent" }, horzLines: { color: P.line + "66" } },
+      rightPriceScale: { borderColor: P.line }, timeScale: { borderColor: P.line, rightOffset: 4 },
+      crosshair: { mode: LC.CrosshairMode.Normal }, handleScale: { axisPressedMouseMove: true },
+    });
+    const dates = BARS.dates.slice(-b.n), s = x.s;
+    const candle = chart.addCandlestickSeries({ upColor: P.up, downColor: P.down, borderUpColor: P.up, borderDownColor: P.down, wickUpColor: P.up, wickDownColor: P.down, priceLineVisible: false });
+    candle.setData(dates.map((t, i) => ({ time: t, open: b.o[i], high: b.h[i], low: b.l[i], close: b.c[i] })));
+    const vol = chart.addHistogramSeries({ priceScaleId: "vol", priceFormat: { type: "volume" }, lastValueVisible: false, priceLineVisible: false });
+    chart.priceScale("vol").applyOptions({ scaleMargins: { top: 0.84, bottom: 0 } });
+    chart.priceScale("right").applyOptions({ scaleMargins: { top: 0.12, bottom: 0.2 } });
+    vol.setData(dates.map((t, i) => ({ time: t, value: b.v[i], color: (b.c[i] >= b.o[i] ? P.up : P.down) + "55" })));
+    const line = (arr, color, w) => {
+      const ls = chart.addLineSeries({ color, lineWidth: w || 1, lastValueVisible: false, priceLineVisible: false, crosshairMarkerVisible: false });
+      ls.setData(arr.map((v, i) => (v == null ? null : { time: dates[i], value: +v.toFixed(2) })).filter(Boolean)); return ls;
+    };
+    line(emaArr(b.c, 200, b.e200), P.ma200, 1); line(emaArr(b.c, 50), P.ma50, 2); line(emaArr(b.c, 20), P.ma20, 1); line(emaArr(b.c, 10), P.ma10, 1);
+    const pl = (price, color, title, style) => candle.createPriceLine({ price, color, lineWidth: 1, lineStyle: style == null ? LC.LineStyle.Dashed : style, axisLabelVisible: true, title });
+    pl(s.entry, P.accent, "Entry"); pl(s.stop, P.down, "Stop"); pl(s.target, P.up, "Target");
+    const n = dates.length - 1, i0 = Math.max(0, n - s.span[0]), i1 = Math.max(0, n - s.span[1]);
+    if (s.type === "flatbase") {
+      // Shaded bands: resistance across the top of the base, support across the bottom.
+      const band = (top, bottom, color) => {
+        const bs = chart.addBaselineSeries({ baseValue: { type: "price", price: bottom }, topLineColor: color + "cc", topFillColor1: color + "44", topFillColor2: color + "44",
+          bottomLineColor: "transparent", bottomFillColor1: "transparent", bottomFillColor2: "transparent", lineWidth: 1, lastValueVisible: false, priceLineVisible: false, crosshairMarkerVisible: false });
+        bs.setData([{ time: dates[i0], value: top }, { time: dates[i1], value: top }]);
+        const fl = chart.addLineSeries({ color: color + "cc", lineWidth: 1, lastValueVisible: false, priceLineVisible: false, crosshairMarkerVisible: false });
+        fl.setData([{ time: dates[i0], value: bottom }, { time: dates[i1], value: bottom }]);
+      };
+      band(s.lines.pivot, s.lines.zone, P.down);
+      band(s.lines.support, s.lines.low, P.up);
+      candle.setMarkers((s.touches || []).map((k, j) => ({ time: dates[Math.max(0, n - k)], position: "aboveBar", color: P.fg, shape: "arrowDown", text: String(j + 1) })));
+    } else {
+      candle.setMarkers([{ time: dates[i0], position: "aboveBar", color: P.fg, shape: "arrowDown", text: "Swing high" }]);
+    }
+    chart.timeScale().setVisibleLogicalRange({ from: n - 135, to: n + 5 });
+  }
+  const redraw = () => { if (current) drawChart(current); };
+  window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", redraw);
+  new MutationObserver(redraw).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+
+  /* ---------------- boot ---------------- */
+  function renderMeta() {
+    const g = META.regime;
+    $("asof").textContent = `Scan of ${META.universe.toLocaleString("en-US")} US stocks · close of ${META.asOf} · signals are for the next session`;
+    $("regime").innerHTML = `<span class="chip state-${g.state}"><span class="dot"></span>${esc(g.text)}</span>` +
+      g.indexes.map((i) => `<span class="chip">${i.ticker} <span class="num ${i.chg >= 0 ? "up" : "down"}">${pct(i.chg, 2)}</span><span class="muted">${i.vs50 >= 0 ? "above" : "below"} 50-day by ${fmt(Math.abs(i.vs50), 1)}%</span></span>`).join("") +
+      `<span class="chip"><span class="num">${g.breadth50}%</span><span class="muted">of stocks above 50-day</span></span>`;
+    $("foot").textContent = `Generated ${META.generated} from Yahoo Finance daily bars. The scan covers stocks above $${META.floor.price} with a 10-day average volume over ${fmt(META.floor.volume / 1e6, 1)}M shares, so filters looser than that return nothing extra. Earnings dates from Yahoo are sometimes wrong; check before holding through a report. The setup rules have not been backtested. This is an idea list, not trading advice.`;
+  }
+  fetch("data/scan.json").then((r) => { if (!r.ok) throw new Error(r.status); return r.json(); }).then((d) => {
+    META = d.meta; ROWS = d.rows;
+    if (!META.volPeriods.map(String).includes(S.volPeriod)) S.volPeriod = "10";
+    renderMeta(); syncInputs(); bindFilters(); bindList(); renderList();
+    return fetch("data/bars.json").then((r) => r.json()).then((b) => { BARS = b; redraw(); });
+  }).catch((e) => {
+    $("asof").textContent = "Could not load the scan data (data/scan.json). Run the scan first: python scan.py";
+    console.error(e);
+  });
+})();
+</script>
