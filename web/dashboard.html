@@ -229,7 +229,7 @@ footer { color: var(--muted); font-size: 12.5px; max-width: 90ch; }
   const DEFAULTS = {
     dvPeriod: "20", dvMin: 50, volPeriod: "10", volMin: "", priceMin: 3, priceMax: "", rsMin: 0, scoreMin: 0, hideEarn: false,
     rules: [{ a: "ema", ap: "20", op: ">", b: "ema", bp: "50" }, { a: "ema", ap: "10", op: ">", b: "ema", bp: "50" }],
-    setup: "all", status: { setup: true, go: true, ext: false },
+    v: 3, status: { setup: true, go: true, ext: true },
     sort: { key: "score", dir: -1 },
   };
   const store = {
@@ -237,7 +237,9 @@ footer { color: var(--muted); font-size: 12.5px; max-width: 90ch; }
     set(v) { try { localStorage.setItem("swing-screener-v2", JSON.stringify(v)); } catch (e) { /* storage unavailable */ } },
   };
   const clone = (o) => JSON.parse(JSON.stringify(o));
-  let S = Object.assign(clone(DEFAULTS), store.get() || {});
+  const saved = store.get() || {};
+  let S = Object.assign(clone(DEFAULTS), saved);
+  if (!(saved.v >= 3)) { S.status = clone(DEFAULTS.status); S.v = 3; }  // older saved settings hid extended stocks
   let META = null, ROWS = [], BARS = {}, selected = null, chart = null, series = {};
 
   const STATUS = {
