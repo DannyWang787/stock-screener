@@ -172,7 +172,7 @@ footer { color: var(--muted); font-size: 12.5px; max-width: 90ch; }
     <div id="maRules"></div>
     <div class="rule"><button class="btn" id="addRule" type="button">+ Add moving-average rule</button></div>
     <div class="rules-more">
-      <label>Relative strength rank ≥ <input class="ctl" id="rsMin" type="number" min="0" max="99" step="5" inputmode="numeric"></label>
+      <label>RS Rating ≥ <input class="ctl" id="rsMin" type="number" min="0" max="99" step="5" inputmode="numeric"></label>
       <label>Minimum score <input class="ctl" id="scoreMin" type="number" min="0" max="100" step="5" inputmode="numeric"></label>
       <label><input type="checkbox" id="hideEarn"> Hide stocks reporting earnings within 7 days</label>
     </div>
@@ -181,7 +181,6 @@ footer { color: var(--muted); font-size: 12.5px; max-width: 90ch; }
   <div class="main">
     <section class="panel" aria-label="Candidates">
       <div class="list-head">
-        <div class="seg" id="setupSeg" role="group" aria-label="Setup type"></div>
         <div class="toggles" id="statusTog" role="group" aria-label="Status"></div>
       </div>
       <div class="table-scroll">
@@ -203,7 +202,7 @@ footer { color: var(--muted); font-size: 12.5px; max-width: 90ch; }
         <div class="legend">
           <span style="--c: var(--ma10)">EMA 10</span><span style="--c: var(--ma20)">EMA 20</span>
           <span style="--c: var(--ma50)">EMA 50</span><span style="--c: var(--ma200)">EMA 200</span>
-          <span id="lgRes" style="--c: var(--down)" hidden>Resistance zone</span><span id="lgSup" style="--c: var(--up)" hidden>Support zone</span>
+          <span style="--c: var(--down)">Resistance zone</span><span style="--c: var(--up)">Support zone</span>
         </div>
         <div id="chart"></div>
         <div class="note" id="dNote" hidden style="margin-top:12px"></div>
@@ -241,9 +240,8 @@ footer { color: var(--muted); font-size: 12.5px; max-width: 90ch; }
   let S = Object.assign(clone(DEFAULTS), store.get() || {});
   let META = null, ROWS = [], BARS = {}, selected = null, chart = null, series = {};
 
-  const SETUP_NAME = { pullback: "Pullback", flatbase: "Flat base" };
   const STATUS = {
-    setup: ["Setting up", "s-setup", "setup"], triggered: ["Triggered", "s-go", "go"],
+    setup: ["Setting up", "s-setup", "setup"],
     breakout: ["Breaking out", "s-go", "go"], buyrange: ["In buy range", "s-go", "go"], extended: ["Extended", "s-ext", "ext"],
   };
   const fmt = (n, d = 2) => (n == null || isNaN(n) ? "–" : Number(n).toLocaleString("en-US", { minimumFractionDigits: d, maximumFractionDigits: d }));
@@ -332,28 +330,23 @@ footer { color: var(--muted); font-size: 12.5px; max-width: 90ch; }
 
   /* ---------------- list ---------------- */
   const COLS = [
-    ["t", "Ticker", (x) => x.r.t], ["type", "Setup", (x) => x.s.type], ["status", "Status", (x) => STATUS[x.s.status][0]],
+    ["t", "Ticker", (x) => x.r.t], ["status", "Status", (x) => STATUS[x.s.status][0]],
     ["score", "Score", (x) => x.s.score], ["close", "Close", (x) => x.r.close], ["chg", "Chg", (x) => x.r.chg],
     ["r20", "20D %", (x) => x.r.ret["20"]], ["r60", "60D %", (x) => x.r.ret["60"]], ["r90", "90D %", (x) => x.r.ret["90"]],
-    ["rs", "RS", (x) => x.r.rs], ["vol", "$ vol", (x) => x.r.dvol[S.dvPeriod]],
+    ["rs", "RS Rating", (x) => x.r.rs], ["vol", "$ vol", (x) => x.r.dvol[S.dvPeriod]],
   ];
   function renderList() {
     const all = candidates();
-    const counts = { all: all.length, pullback: 0, flatbase: 0 };
-    all.forEach((x) => counts[x.s.type]++);
-    $("setupSeg").innerHTML = [["all", "All"], ["pullback", "Pullback"], ["flatbase", "Flat base"]]
-      .map(([k, l]) => `<button type="button" data-setup="${k}" aria-pressed="${S.setup === k}">${l}<span class="n">${counts[k]}</span></button>`).join("");
-    $("statusTog").innerHTML = [["setup", "Setting up"], ["go", "Triggered"], ["ext", "Extended"]]
+    $("statusTog").innerHTML = [["setup", "Setting up"], ["go", "Broke out"], ["ext", "Extended"]]
       .map(([k, l]) => `<button type="button" class="tog" data-status="${k}" aria-pressed="${!!S.status[k]}">${l}</button>`).join("");
-    const col = COLS.find((c) => c[0] === S.sort.key) || COLS[3];
-    const list = all.filter((x) => (S.setup === "all" || x.s.type === S.setup) && S.status[STATUS[x.s.status][2]])
+    const col = COLS.find((c) => c[0] === S.sort.key) || COLS.find((c) => c[0] === "score");
+    const list = all.filter((x) => S.status[STATUS[x.s.status][2]])
       .sort((a, b) => { const va = col[2](a), vb = col[2](b); return (va > vb ? 1 : va < vb ? -1 : b.s.score - a.s.score) * S.sort.dir; });
     $("thead").innerHTML = COLS.map((c) => `<th data-key="${c[0]}" class="${c[0] === "type" || c[0] === "status" ? "l" : ""}"${c[0] === S.sort.key ? ` aria-sort="${S.sort.dir > 0 ? "ascending" : "descending"}"` : ""}>${c[1]}${c[0] === S.sort.key ? (S.sort.dir > 0 ? " ↑" : " ↓") : ""}</th>`).join("");
     $("tbody").innerHTML = list.map((x) => {
       const { r, s } = x, st = STATUS[s.status];
       return `<tr data-id="${x.id}" aria-selected="${x.id === selected}" tabindex="0">
         <td><div class="tk">${r.t}</div><div class="nm">${esc(r.name)}</div></td>
-        <td class="l">${SETUP_NAME[s.type]}</td>
         <td class="l"><span class="pill ${st[1]}">${st[0]}</span></td>
         <td><span class="score num">${s.score}<i><b style="width:${s.score}%"></b></i></span></td>
         <td class="num">${fmt(r.close)}</td><td class="num ${r.chg >= 0 ? "up" : "down"}">${pct(r.chg)}</td>
@@ -362,14 +355,13 @@ footer { color: var(--muted); font-size: 12.5px; max-width: 90ch; }
     }).join("");
     $("empty").hidden = list.length > 0;
     if (!list.length) $("empty").textContent = all.length
-      ? "No candidates with these status toggles. Turn on Setting up, Triggered or Extended."
+      ? "No candidates with these status toggles. Turn on Setting up, Broke out or Extended."
       : "No stock passes these filters. Lower the volume minimum or remove a moving-average rule.";
     if (!list.some((x) => x.id === selected)) select(list.length ? list[0].id : null, list);
     LIST = list;
   }
   let LIST = [];
   function bindList() {
-    $("setupSeg").addEventListener("click", (e) => { const b = e.target.closest("[data-setup]"); if (b) { S.setup = b.dataset.setup; changed(); } });
     $("statusTog").addEventListener("click", (e) => { const b = e.target.closest("[data-status]"); if (b) { S.status[b.dataset.status] = !S.status[b.dataset.status]; changed(); } });
     $("thead").addEventListener("click", (e) => {
       const th = e.target.closest("th"); if (!th) return;
@@ -393,17 +385,16 @@ footer { color: var(--muted); font-size: 12.5px; max-width: 90ch; }
     $("dTk").textContent = r.t; $("dNm").textContent = r.name;
     $("dPx").textContent = fmt(r.close);
     $("dChg").textContent = pct(r.chg, 2); $("dChg").className = "num " + (r.chg >= 0 ? "up" : "down");
-    $("dPills").innerHTML = `<span class="pill">${SETUP_NAME[s.type]}</span> <span class="pill ${st[1]}">${st[0]}</span>`;
-    $("dSetupName").textContent = SETUP_NAME[s.type] + " details";
-    const extra = { "Score": s.score + " / 100", "RS rank": r.rs, "ATR": fmt(r.atr, 1) + "% of price", "From 52-week high": pct(r.fromHigh), "Volume today": fmt(r.volToday, 2) + "x avg" };
+    $("dPills").innerHTML = `<span class="pill ${st[1]}">${st[0]}</span>`;
+    $("dSetupName").textContent = "Flat base details";
+    const extra = { "Score": s.score + " / 100", "RS Rating": r.rs, "ATR": fmt(r.atr, 1) + "% of price", "From 52-week high": pct(r.fromHigh), "Volume today": fmt(r.volToday, 2) + "x avg" };
     $("dNotes").innerHTML = Object.entries(Object.assign({}, s.notes, extra)).map(([k, v]) => `<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join("");
     $("dParts").innerHTML = (s.parts || []).map(([k, got, max]) => `<dt>${esc(k)}</dt><dd class="${got <= max * 0.4 ? "down" : ""}">${got} / ${max}</dd>`).join("") +
       `<dt><strong>Total</strong></dt><dd><strong>${s.score} / 100</strong></dd>`;
     const notes = [];
-    if (r.earn) { const d = daysTo(r.earn); if (d >= 0 && d <= 14) notes.push(`Earnings expected ${r.earn} (in ${d} days). A swing trade may be held through the report.`); }
+    if (r.earn) { const d = daysTo(r.earn); if (d >= 0 && d <= 14) notes.push(`Earnings expected ${r.earn} (in ${d} days). A trade may be held through the report.`); }
     if (s.status === "extended") notes.push(`Price is ${fmt(s.ext, 1)}% above the base high.`);
     $("dNote").hidden = !notes.length; $("dNote").textContent = notes.join(" ");
-    $("lgRes").hidden = $("lgSup").hidden = s.type !== "flatbase";
     current = x; drawChart(x);
   }
   let current = null;
@@ -457,7 +448,7 @@ footer { color: var(--muted); font-size: 12.5px; max-width: 90ch; }
     };
     line(emaArr(b.c, 200, b.e200), P.ma200, 1); line(emaArr(b.c, 50), P.ma50, 2); line(emaArr(b.c, 20), P.ma20, 1); line(emaArr(b.c, 10), P.ma10, 1);
     const n = dates.length - 1, i0 = Math.max(0, n - s.span[0]), i1 = Math.max(0, n - s.span[1]);
-    if (s.type === "flatbase") {
+    {
       // Shaded bands: resistance across the top of the base, support across the bottom.
       const band = (top, bottom, color) => {
         const bs = chart.addBaselineSeries({ baseValue: { type: "price", price: bottom }, topLineColor: color + "cc", topFillColor1: color + "44", topFillColor2: color + "44",
@@ -469,8 +460,6 @@ footer { color: var(--muted); font-size: 12.5px; max-width: 90ch; }
       band(s.lines.pivot, s.lines.zone, P.down);
       band(s.lines.support, s.lines.low, P.up);
       candle.setMarkers((s.touches || []).map((k, j) => ({ time: dates[Math.max(0, n - k)], position: "aboveBar", color: P.fg, shape: "arrowDown", text: String(j + 1) })));
-    } else {
-      candle.setMarkers([{ time: dates[i0], position: "aboveBar", color: P.fg, shape: "arrowDown", text: "Swing high" }]);
     }
     chart.timeScale().setVisibleLogicalRange({ from: n - 135, to: n + 5 });
   }

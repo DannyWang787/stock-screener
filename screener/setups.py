@@ -1,4 +1,4 @@
-"""Setup detectors. Each works on numpy arrays and an end index `t`, so the same
+"""Flat base detector. It works on numpy arrays and an end index `t`, so the same
 code can later be replayed over history for backtesting.
 
 PATTERN rules decide whether the setup exists at all. Everything else is a SCORE
@@ -18,104 +18,6 @@ def _score(parts):
     """parts: [(label, fraction 0..1, max points)] -> (total, breakdown for the dashboard)."""
     rows = [[label, round(frac * pts), pts] for label, frac, pts in parts]
     return sum(r[1] for r in rows), rows
-
-
-# --------------------------------------------------------------------------- pullback
-def pullback_at(a, t):
-    """Is there a pullback as of bar t? Returns measurements or None."""
-    h, l, c, v = a["h"], a["l"], a["c"], a["v"]
-    if t < C.PB_HIGH_LOOKBACK + 70:
-        return None
-    # ---- pattern: a swing high in the last few bars, then a real dip from it
-    w0 = t - C.PB_MAX_DAYS
-    hi_i = w0 + int(np.argmax(h[w0 : t + 1]))
-    days = t - hi_i
-    if days < C.PB_MIN_DAYS:
-        return None
-    H = h[hi_i]
-    lo_i = hi_i + 1 + int(np.argmin(l[hi_i + 1 : t + 1]))
-    L = l[lo_i]
-    depth = (H - L) / H
-    if not (C.PB_MIN_DEPTH <= depth <= C.PB_MAX_DEPTH_CAP):
-        return None
-    pb = slice(hi_i + 1, t + 1)
-    if c[pb].min() >= c[hi_i]:
-        return None  # no close below the swing-high day's close: price has not actually pulled back
-
-    # ---- score inputs only from here on
-    fresh_high = bool(H >= h[hi_i - C.PB_HIGH_LOOKBACK : hi_i].max())
-    advance = float(H / l[hi_i - C.PB_HIGH_LOOKBACK : hi_i].min() - 1)
-    ema50_rising = bool(a["ema50"][t] > a["ema50"][t - 20])
-    recent = slice(min(hi_i + 1, t + 1 - C.PB_HOLD_BARS), t + 1)
-    below50 = int((c[recent] < a["ema50"][recent]).sum())
-    if below50 == 0 and (c[pb] >= a["ema20"][pb]).all():
-        held, hold = "20 EMA", 1.0
-    elif below50 == 0:
-        held, hold = "50 EMA", 0.6
-    elif c[t] >= a["ema50"][t]:
-        held, hold = f"No: {below50} closes below 50 EMA, back above now", 0.25
-    else:
-        held, hold = f"No: {below50} closes below 50 EMA, still below", 0.0
-    best = None  # which moving average did the pullback low reach?
-    for name, arr in (("10 EMA", a["ema10"]), ("20 EMA", a["ema20"]), ("50 EMA", a["ema50"])):
-        dist = (L - arr[lo_i]) / arr[lo_i]
-        if -C.PB_MA_TOLERANCE * 1.5 <= dist <= C.PB_MA_TOLERANCE:
-            if best is None or abs(dist) < abs(best[1]):
-                best = (name, dist)
-    pb_vol = v[pb].mean()
-    return {"hi_i": hi_i, "lo_i": lo_i, "high": float(H), "low": float(L), "depth": float(depth),
-            "days": int(days), "held": held, "hold": hold, "fresh_high": fresh_high, "advance": advance,
-            "ema50_rising": ema50_rising, "ma": best[0] if best else "None within 2%",
-            "ma_dist": float(best[1]) if best else None,
-            "vol_ratio": float(pb_vol / a["vol50"][t]) if a["vol50"][t] > 0 else 1.0}
-
-
-def detect_pullback(a, rs):
-    t = len(a["c"]) - 1
-    c, h = a["c"], a["h"]
-    atr = a["atr"][t]
-    prev = pullback_at(a, t - 1)
-    if prev and c[t] > h[t - 1]:
-        status, p = "triggered", prev
-        entry = float(h[t - 1]) + 0.01
-        low = min(p["low"], float(a["l"][t]))
-    else:
-        p = pullback_at(a, t)
-        if not p:
-            return None
-        status = "setup"
-        entry = float(h[t]) + 0.01
-        low = p["low"]
-    stop = low - 0.1 * atr
-    risk = (entry - stop) / entry
-    if risk <= 0.005:
-        return None  # no room between entry and stop: levels are not usable
-    trend = (0.4 * p["ema50_rising"] + 0.3 * p["fresh_high"]
-             + 0.3 * _clip01(p["advance"] / C.PB_MIN_PRIOR_ADVANCE))
-    span = C.PB_DEEP - C.PB_IDEAL_DEPTH
-    # Volume is shown in the details but deliberately not scored.
-    score, parts = _score([
-        ("Relative strength", _clip01(rs / 100), 30),
-        ("Closes held the 20 / 50 EMA", p["hold"], 25),
-        ("Uptrend into the high", trend, 15),
-        ("Low tagged an EMA", 0.0 if p["ma_dist"] is None else _clip01(1 - abs(p["ma_dist"]) / 0.03), 15),
-        ("Depth near 7%", _clip01(1 - abs(p["depth"] - C.PB_IDEAL_DEPTH) / span), 15),
-    ])
-    return {
-        "type": "pullback", "status": status, "score": score, "parts": parts,
-        "entry": round(entry, 2), "stop": round(stop, 2),
-        "target": round(entry + C.TARGET_R * (entry - stop), 2), "risk": round(risk * 100, 1),
-        "ext": round((c[t] / entry - 1) * 100, 1),
-        "notes": {"Swing high": round(p["high"], 2), "Pullback low": round(low, 2),
-                  "Depth": f"{p['depth'] * 100:.1f}%", "Days from high": p["days"],
-                  "Closes held above": p["held"], "Low reached": p["ma"],
-                  "Swing high is a 60-day high": "Yes" if p["fresh_high"] else "No",
-                  "50 EMA rising": "Yes" if p["ema50_rising"] else "No",
-                  "Advance into the high": f"{p['advance'] * 100:.0f}%",
-                  "Pullback volume": f"{p['vol_ratio']:.2f}x avg"},
-        "lines": {"high": round(p["high"], 2)},
-        "span": [int(len(c) - 1 - p["hi_i"]), 0],
-    }
 
 
 # --------------------------------------------------------------------------- flat base

@@ -38,13 +38,24 @@ def arrays(df):
     return a
 
 
+
+
 def rs_raw(c):
-    """Weighted 3/6/12-month return (recent quarter counts double)."""
-    def r(n):
-        return c[-1] / c[-1 - n] - 1 if len(c) > n else np.nan
-    parts = [r(63), r(63), r(126), r(189), r(252)]
-    parts = [p for p in parts if not np.isnan(p)]
-    return float(np.mean(parts)) if parts else np.nan
+    """Weighted 12-month performance for the RS Rating.
+
+    The year is split into four separate quarters of RS_QUARTER trading days,
+    and each quarter's return is weighted by RS_WEIGHTS (40/20/20/20)."""
+    q = C.RS_QUARTER
+    if len(c) < 4 * q + 1:
+        return np.nan
+    rets = [c[-1 - i * q] / c[-1 - (i + 1) * q] - 1 for i in range(4)]
+    return float(sum(w * r for w, r in zip(C.RS_WEIGHTS, rets)))
+
+
+def rs_rating(raw):
+    """Percentile rank against every stock in the scan, as a whole number 1-99."""
+    pct = pd.Series(raw).rank(pct=True)
+    return np.clip(np.ceil(pct * 99), 1, 99).fillna(1).astype(int).to_dict()
 
 
 def regime(bars_idx, breadth):
@@ -98,7 +109,7 @@ def main(limit=None):
             continue
         work[t] = df
         raw[t] = rs_raw(c)
-    rs = (pd.Series(raw).rank(pct=True) * 99).round().fillna(0).astype(int).to_dict()
+    rs = rs_rating(raw)
     print(f"  {len(work)} stocks in scan universe")
 
     rows, chart, above50 = [], {}, 0
@@ -106,7 +117,7 @@ def main(limit=None):
         a = arrays(df)
         c = a["c"]
         above50 += c[-1] > a["sma50"][-1]
-        found = [s for s in (setups.detect_pullback(a, rs[t]), setups.detect_flat_base(a, rs[t])) if s]
+        found = [s for s in (setups.detect_flat_base(a, rs[t]),) if s]
         if not found:
             continue
         hi52, lo52 = a["h"][-252:].max(), a["l"][-252:].min()

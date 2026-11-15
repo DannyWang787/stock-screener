@@ -1,6 +1,6 @@
 # Swing Setup Screener
 
-End-of-day US stock screener for two swing setups: **pullback in uptrend** and **flat base**.
+End-of-day US stock screener for **flat base** setups, ranked by a score and an RS Rating (1-99).
 
 ## Run it
 
@@ -29,7 +29,7 @@ Then open http://localhost:8000. A full scan downloads about 5,000 tickers and t
 |---|---|
 | `config.py` | Every scan rule and threshold |
 | `screener/data.py` | Ticker list (exchange symbol directory) and daily bars (yfinance) |
-| `screener/setups.py` | Pullback and flat base detectors, scores, entry/stop/target |
+| `screener/setups.py` | Flat base detector and score |
 | `scan.py` | Runs the scan, writes `site/data/scan.json` and `site/data/bars.json` |
 | `web/dashboard.html` | The dashboard; filters run in the browser |
 | `.github/workflows/scan.yml` | Nightly scan and GitHub Pages deploy |

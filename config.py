@@ -15,26 +15,17 @@ Two kinds of rule, kept strictly apart:
 UNIVERSE_MIN_PRICE = 3.0
 UNIVERSE_MIN_DOLLAR_VOLUME = 10_000_000  # price x shares, 20-day average
 HISTORY_PERIOD = "2y"
-MIN_BARS = 250                         # skip recent IPOs
+MIN_BARS = 253                         # a full year plus one bar, needed for the RS Rating
 
 # ---- Values precomputed for the dashboard's adjustable filters
 MA_PERIODS = [5, 10, 20, 50, 100, 150, 200]
 VOLUME_PERIODS = [5, 10, 20, 50]
 RETURN_PERIODS = [20, 60, 90]          # trading days, shown as % change columns
 
-# ---- Pullback: PATTERN rules
-PB_MIN_DAYS = 2              # bars since the swing high
-PB_MAX_DAYS = 10             # the swing high is the highest high of this many recent bars
-PB_MIN_DEPTH = 0.03          # high -> pullback low; less than this is not a pullback
-PB_MAX_DEPTH_CAP = 0.25      # more than this is a breakdown, not a pullback
-
-# ---- Pullback: SCORE rules (never screen out)
-PB_HIGH_LOOKBACK = 60        # points if the swing high was the highest high of this many bars
-PB_MIN_PRIOR_ADVANCE = 0.15  # full points for this rise into the swing high over those bars
-PB_HOLD_BARS = 20            # points for closes holding the 50 EMA over this many recent bars
-PB_MA_TOLERANCE = 0.02       # points if the pullback low came within 2% of the 10/20/50 EMA
-PB_IDEAL_DEPTH = 0.07        # full depth points here, none at PB_DEEP
-PB_DEEP = 0.15
+# ---- RS Rating (1-99): weighted 12-month performance ranked against the whole scan.
+# Each quarter is 63 trading days; the most recent quarter counts double.
+RS_QUARTER = 63
+RS_WEIGHTS = [0.4, 0.2, 0.2, 0.2]      # last 3 months, 3-6, 6-9, 9-12 months ago
 
 # ---- Flat base: PATTERN rules
 FB_MIN_LEN = 20              # 4 weeks, measured from the first touch of resistance
